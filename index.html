@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acid Drift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#12061c; --ink2:#22103a; --magenta:#ff2d95; --cyan:#2df5ff;
+  --acid:#e8ff3a; --paper:#fff4fb; --mute:#a98bc0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ink);color:var(--paper);
+  font-family:"Space Grotesk",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.4}
+body{min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.display{font-family:Anton,Impact,"Arial Narrow Bold","Helvetica Neue",sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.01em}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;padding:20px 20px 10px}
+h1{font-size:clamp(52px,10vw,110px);line-height:.85;margin:0;color:var(--acid)}
+#phase{font-size:clamp(20px,3.4vw,34px);line-height:1;color:var(--magenta);margin:0 0 6px;min-height:1em}
+#scope{display:block;width:100%;height:clamp(180px,32vh,300px);background:var(--ink);border-top:2px solid var(--ink2);border-bottom:2px solid var(--ink2)}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;padding:16px 20px}
+#go{font-size:clamp(28px,5vw,44px);line-height:1;padding:14px 30px 12px;border:0;cursor:pointer;
+  background:var(--magenta);color:var(--ink);border-radius:4px;transition:transform .08s}
+#go:active{transform:scale(.97)}
+#go.on{background:var(--acid)}
+#go:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+.ctl{display:flex;align-items:center;gap:10px;color:var(--mute)}
+.ctl input[type=range]{accent-color:var(--cyan);width:130px}
+#riff{background:transparent;color:var(--cyan);border:2px solid var(--cyan);border-radius:4px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+#riff:hover{background:var(--cyan);color:var(--ink)}
+.steps{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;padding:4px 20px 14px}
+.steps div{height:22px;background:var(--ink2);border-radius:2px;transition:background .06s}
+.steps .g{background:#7a1d55}
+.steps .a{background:var(--magenta)}
+.steps .s{border-bottom:3px solid var(--cyan)}
+.steps .now{background:var(--acid)!important}
+.drift{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 30px;padding:4px 20px 30px}
+.row{display:grid;grid-template-columns:96px 1fr 62px;align-items:center;gap:10px;font-size:14px}
+.row .n{color:var(--mute)}
+.row .b{height:8px;background:var(--ink2);border-radius:4px;overflow:hidden}
+.row .b i{display:block;height:100%;width:50%;background:var(--cyan);border-radius:4px;transition:width .3s linear}
+.row .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--paper)}
+.hint{color:var(--mute);padding:0 20px 24px;max-width:60ch}
+@media (prefers-reduced-motion:reduce){.row .b i{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1 class="display">Acid Drift</h1>
+  <p id="phase" class="display">Press start</p>
+</header>
+<canvas id="scope"></canvas>
+<div class="controls">
+  <button id="go" class="display" aria-pressed="false">Start</button>
+  <label class="ctl">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+  <label class="ctl">Chaos <input id="chaos" type="range" min="0.2" max="4" step="0.05" value="1"></label>
+  <button id="riff">New riff on next bar</button>
+</div>
+<div class="steps" id="steps"></div>
+<div class="drift" id="drift"></div>
+<p class="hint">Nothing here is a loop. A 303-style voice plays a generated 16-step riff that mutates every two bars; every parameter below wanders on its own slow timescale, and after 24 bars the floor drops out for a breakdown and a build of 8 to 16 bars before a fresh drop. Space toggles play.</p>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const rnd = n => Math.floor(Math.random() * n);
+const pick = a => a[rnd(a.length)];
+
+// ---------- slow drift: sum of incommensurate sines, phase-accumulated so chaos changes never jump
+class Drift {
+  constructor(min, max, periods, fmt, log) {
+    this.min = min; this.max = max; this.fmt = fmt; this.log = log;
+    this.osc = periods.map(p => ({ p, ph: Math.random() * 6.283, w: 0.5 + Math.random() }));
+    this.u = 0.5; this.v = log ? Math.sqrt(min * max) : (min + max) / 2;
+  }
+  step(dt, chaos) {
+    let s = 0, w = 0;
+    for (const o of this.osc) { o.ph += dt * chaos * 6.283 / o.p; s += o.w * Math.sin(o.ph); w += o.w; }
+    this.u = Math.min(1, Math.max(0, 0.5 + 0.72 * s / w));
+    this.v = this.log ? this.min * Math.pow(this.max / this.min, this.u) : this.min + (this.max - this.min) * this.u;
+    return this.v;
+  }
+}
+const P = {
+  tempo:   new Drift(130, 146, [240, 410, 95], v => v.toFixed(1) + ' bpm'),
+  cutoff:  new Drift(180, 2600, [37, 61, 140], v => Math.round(v) + ' Hz', true),
+  res:     new Drift(5, 24, [53, 89, 21], v => 'Q ' + v.toFixed(1)),
+  env:     new Drift(0.8, 5, [47, 113, 29], v => '×' + v.toFixed(2)),
+  decay:   new Drift(0.06, 0.42, [71, 43, 160], v => Math.round(v * 1000) + ' ms'),
+  drive:   new Drift(1.5, 14, [83, 130, 33], v => v.toFixed(1)),
+  wave:    new Drift(0, 0.7, [97, 210, 41], v => Math.round(v * 100) + '% sq'),
+  delay:   new Drift(0.08, 0.5, [67, 150, 31], v => Math.round(v * 100) + '%'),
+  swing:   new Drift(0, 0.24, [180, 77, 300], v => Math.round(v * 100) + '%'),
+  hats:    new Drift(0, 1, [59, 101, 23], v => Math.round(v * 100) + '%'),
+  sub:     new Drift(0.25, 0.8, [120, 64, 210], v => Math.round(v * 100) + '%'),
+  sweep:   new Drift(200, 4000, [90, 27, 170], v => Math.round(v) + ' Hz', true),
+  width:   new Drift(0.15, 1, [110, 48, 260], v => Math.round(v * 100) + '%'),
+  padDet:  new Drift(2, 35, [73, 141, 39], v => v.toFixed(0) + ' ct'),
+  padQ:    new Drift(0.7, 16, [95, 52, 220], v => 'Q ' + v.toFixed(1), true),
+  padTrem: new Drift(0, 0.9, [66, 118, 35], v => Math.round(v * 100) + '%'),
+  gate:    new Drift(0.3, 1.1, [44, 97, 187], v => Math.round(v * 100) + '%'),
+  vdecay:  new Drift(0.04, 0.7, [58, 131, 26], v => Math.round(v * 1000) + ' ms', true),
+  hatTone: new Drift(3500, 14000, [49, 122, 205], v => (v / 1000).toFixed(1) + ' kHz', true),
+  hatMove: new Drift(0, 1, [63, 34, 150], v => Math.round(v * 100) + '%'),
+};
+const NAMES = { tempo:'Tempo', cutoff:'Cutoff', res:'Resonance', env:'Env mod', decay:'Decay',
+  drive:'Drive', wave:'Waveform', delay:'Delay', swing:'Swing', hats:'Hat density', sub:'Sub bass', sweep:'Pad sweep', width:'Stereo width', padDet:'Pad detune', padQ:'Pad resonance', padTrem:'Pad tremolo', gate:'Gate length', vdecay:'Amp decay', hatTone:'Hat tone', hatMove:'Hat motion' };
+
+// ---------- state
+const A = {};          // audio nodes
+const S = { on:false, step:0, next:0, lastT:0, q:[], flashQ:[], cur:-1, root:33, pat:null,
+            pendingRiff:false, phase:'full', flash:0, timer:null, voiceMode:'classic' };
+
+// ---------- pattern
+const SCALES = [[0,1,3,5,7,8,10],[0,3,5,7,10],[0,2,3,5,7,8,10],[0,1,3,5,6,8,10]];
+function genPattern() {
+  const sc = pick(SCALES), pat = [];
+  for (let i = 0; i < 16; i++) {
+    const r = Math.random();
+    pat.push({
+      gate: i === 0 || Math.random() < 0.74,
+      note: r < 0.36 ? 0 : r < 0.5 ? 12 : pick(sc),
+      oct: Math.random() < 0.2 ? 1 : 0,
+      acc: Math.random() < 0.32,
+      slide: Math.random() < 0.28,
+      len: pick([0.3, 0.5, 0.75, 0.75, 1, 1, 1.3]),           // per-step gate multiplier: staccato to legato-ish
+    });
+  }
+  return pat;
+}
+function mutate(pat) {
+  const st = pat[rnd(16)], k = rnd(6);
+  if (k === 5) st.len = pick([0.3, 0.5, 0.75, 1, 1.3]);
+  else if (k === 0) st.gate = !st.gate;
+  else if (k === 1) st.note = Math.random() < 0.4 ? 0 : pick(pick(SCALES));
+  else if (k === 2) st.oct = st.oct ? 0 : 1;
+  else if (k === 3) st.acc = !st.acc;
+  else st.slide = !st.slide;
+  pat[0].gate = true;
+}
+
+// ---------- audio graph
+function makeNoise(ctx, dur) {
+  const n = ctx.sampleRate * dur, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return b;
+}
+function makeIR(ctx, dur, dec) {
+  const n = ctx.sampleRate * dur, b = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, dec); }
+  return b;
+}
+function curve(k) {
+  const n = 1024, c = new Float32Array(n), norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / norm; }
+  return c;
+}
+function build() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  A.ctx = ctx;
+  const g = (v) => { const n = ctx.createGain(); n.gain.value = v; return n; };
+  const bq = (type, f, q) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; if (q) n.Q.value = q; return n; };
+
+  A.master = g(parseFloat($('#vol').value));
+  A.comp = ctx.createDynamicsCompressor();
+  Object.assign(A.comp, {}); A.comp.threshold.value = -10; A.comp.knee.value = 8; A.comp.ratio.value = 6;
+  A.comp.attack.value = 0.003; A.comp.release.value = 0.12;
+  A.an = ctx.createAnalyser(); A.an.fftSize = 2048; A.an.smoothingTimeConstant = 0.75;
+  A.master.connect(A.comp).connect(A.an).connect(ctx.destination);
+  A.split = ctx.createChannelSplitter(2); A.comp.connect(A.split);
+  A.anL = ctx.createAnalyser(); A.anR = ctx.createAnalyser();
+  for (const an of [A.anL, A.anR]) { an.fftSize = 2048; an.smoothingTimeConstant = 0.6; }
+  A.split.connect(A.anL, 0); A.split.connect(A.anR, 1);
+
+  A.duck = g(1); A.duck.connect(A.master);      // everything that pumps with the kick
+  // drums get their own fast compressor and makeup so they sit on top rather than under
+  A.drums = g(1); A.dcomp = ctx.createDynamicsCompressor();
+  A.dcomp.threshold.value = -16; A.dcomp.knee.value = 4; A.dcomp.ratio.value = 4;
+  A.dcomp.attack.value = 0.002; A.dcomp.release.value = 0.09;
+  A.drums.connect(A.dcomp).connect(g(1.6)).connect(A.master);
+  // hats get their own bus so they can be filtered, moved, dampened and sent into the space the rest lives in
+  A.hatIn = g(1); A.hatLP = bq('lowpass', 9000, 0.9); A.hatShaper = ctx.createWaveShaper(); A.hatShaper.curve = curve(1.6);
+  A.hatIn.connect(A.hatLP).connect(A.hatShaper);
+  A.hatShaper.connect(g(0.55)).connect(A.drums);                    // part punches with the drums
+  A.hatShaper.connect(g(0.45)).connect(A.duck);                     // part pumps with the synths
+  A.hatLfo = ctx.createOscillator(); A.hatLfo.frequency.value = 4; A.hatLfoG = g(0); A.hatLfoMul = 2;
+  A.hatLfo.connect(A.hatLfoG).connect(A.hatLP.frequency); A.hatLfo.start();
+  const pan = (p) => { const n = ctx.createStereoPanner(); n.pan.value = p; return n; };
+  A.pan = pan;
+
+  // ping-pong delay: L and R taps chase each other through a filtered loop
+  A.delay = g(1); A.dL = ctx.createDelay(2); A.dR = ctx.createDelay(2);
+  const dfL = bq('highpass', 320), dfR = bq('highpass', 320), dlL = bq('lowpass', 3800), dlR = bq('lowpass', 3800);
+  A.dlpL = dlL; A.dlpR = dlR;
+  A.dWob = ctx.createOscillator(); A.dWob.frequency.value = 0.3; A.dWobG = g(0);    // slow delay-time wobble, used by echo tails
+  A.dWob.connect(A.dWobG); A.dWobG.connect(A.dL.delayTime); A.dWobG.connect(A.dR.delayTime); A.dWob.start();
+  A.dfb = g(0.5);
+  A.delay.connect(A.dL);
+  A.dL.connect(dfL).connect(dlL).connect(A.dR);
+  A.dR.connect(dfR).connect(dlR).connect(A.dfb).connect(A.dL);
+  A.dout = g(0.85); A.dout.connect(A.duck);
+  A.dL.connect(pan(-0.85)).connect(A.dout); A.dR.connect(pan(0.85)).connect(A.dout);
+
+  A.rev = ctx.createConvolver(); A.rev.buffer = makeIR(ctx, 1.8, 2.6);
+  A.rout = g(0.3); A.rev.connect(A.rout).connect(A.master);
+  A.hatShaper.connect(g(0.35)).connect(A.rev); A.hatShaper.connect(g(0.12)).connect(A.delay);
+
+  A.noise = makeNoise(ctx, 2);
+  A.kickShaper = ctx.createWaveShaper(); A.kickShaper.curve = curve(3.5);
+  newHatStyle(); newKickStyle();
+  A.kickShaper.connect(A.drums);
+
+  // the 303
+  const v = A.acid = {};
+  v.osc = ctx.createOscillator(); v.osc.type = 'sawtooth';
+  v.osc2 = ctx.createOscillator(); v.osc2.type = 'square';
+  v.osc2g = g(0); v.mix = g(1);
+  v.filt = bq('lowpass', 800, 10);
+  v.vca = g(0);
+  v.shaper = ctx.createWaveShaper(); v.shaper.curve = curve(4);
+  v.post = g(0.42); v.send = g(0.25); v.pan = pan(0);
+  v.osc.connect(v.mix); v.osc2.connect(v.osc2g).connect(v.mix);
+  // extra source: a triangle for plonk
+  v.osc3 = ctx.createOscillator(); v.osc3.type = 'triangle'; v.osc3g = g(0); v.osc3.connect(v.osc3g).connect(v.mix);
+  // pre-filter drive (screams when it hits the resonance), then the filter and VCA
+  v.pre = ctx.createWaveShaper(); v.pre.curve = curve(0.5);
+  v.mix.connect(v.pre).connect(v.filt).connect(v.vca);
+  // two parallel paths after the VCA: dry and formant-filtered; summed into a peaking EQ then the drive
+  v.eq = bq('peaking', 2800, 2); v.eq.gain.value = 0;
+  v.dryG = g(1); v.vca.connect(v.dryG).connect(v.eq);
+  v.form = [[730, 1], [1090, 0.5], [2440, 0.25]].map(([f, lvl]) => {
+    const b = bq('bandpass', f, 8); v.vca.connect(b).connect(g(lvl)).connect(v.formOut || (v.formOut = g(0))); return b;
+  });
+  v.formOut.connect(v.eq);
+  v.eq.connect(v.shaper).connect(v.post).connect(v.pan).connect(A.duck);
+  v.qMul = 1;
+  v.osc3.start();
+  v.shaper.connect(g(0.42)).connect(v.send).connect(A.delay);      // send taps before the post fader so echoes survive a fade-out
+  v.lfo = ctx.createOscillator(); v.lfo.type = 'sine'; v.lfo.frequency.value = 0.09;
+  v.lfoG = g(0.5); v.lfo.connect(v.lfoG).connect(v.pan.pan);
+  v.osc.start(); v.osc2.start(); v.lfo.start();
+  v.lastF = mtof(S.root);
+
+  // sub
+  A.sub = { osc: ctx.createOscillator(), g: g(0) };
+  A.sub.osc.type = 'sine'; A.sub.osc.connect(A.sub.g).connect(A.duck); A.sub.osc.start();
+
+  // pad: three spread oscillators, each with its own detune LFO (chorus), then filter, grit, beat-synced tremolo
+  A.pad = { oscs: [], filt: bq('lowpass', 600, 5), g: g(0), shaper: ctx.createWaveShaper(), trem: g(1),
+            tlfo: ctx.createOscillator(), tlfoG: g(0), voicing: [24, 31, 36], tremMul: 1 };
+  A.pad.shaper.curve = curve(2);
+  A.pad.filt.connect(A.pad.shaper).connect(A.pad.trem).connect(A.pad.g).connect(A.duck);
+  A.pad.tlfo.frequency.value = 2; A.pad.tlfo.connect(A.pad.tlfoG).connect(A.pad.trem.gain); A.pad.tlfo.start();
+  const pr = g(0.6); A.pad.g.connect(pr).connect(A.rev);
+  const pd = g(0.3); A.pad.g.connect(pd).connect(A.delay);
+  [[-0.75, -7, 0.27], [0.75, 5, 0.41], [0, -4, 0.63]].forEach(([p, det, rate], i) => {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.detune.value = det;
+    o.frequency.value = mtof(S.root + A.pad.voicing[i]);
+    const dl = ctx.createOscillator(); dl.frequency.value = rate; const dg = g(8);
+    dl.connect(dg).connect(o.detune); dl.start();
+    o.connect(pan(p)).connect(A.pad.filt); o.start(); A.pad.oscs.push({ o, dg });
+  });
+}
+const VOICINGS = [[24, 31, 36], [24, 31, 38], [24, 29, 36], [24, 31, 43], [24, 27, 34], [24, 31, 34], [24, 36, 43], [24, 30, 39]];
+const PADWAVES = [['sawtooth', 'sawtooth', 'sawtooth'], ['square', 'sawtooth', 'square'], ['triangle', 'sawtooth', 'triangle'],
+                  ['sawtooth', 'square', 'triangle'], ['square', 'square', 'sawtooth']];
+function retunePad(t, glide) {
+  A.pad.oscs.forEach((x, i) => x.o.frequency.setTargetAtTime(mtof(S.root + A.pad.voicing[i]), t, glide));
+}
+
+// ---------- voice character: what the 303 is made of this section
+const VOICES = ['classic', 'classic', 'screamy', 'plonky', 'vocal'];
+const VOWELS = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [440, 1020, 2240]];
+const VOICE_SET = {
+  classic:  {},
+  screamy:  { pre: 7, eq: 12, qMul: 1.9, saw: 0.8 },                 // driven into a hotter resonance, presence boost
+  plonky:   { tri: 0.9, saw: 0.3, qMul: 0.5 },                        // soft source, low resonance, pitch blip (in acidStep)
+  vocal:    { dry: 0.15, form: 1.6, qMul: 0.6 },                      // formant bank, vowel changes bar to bar
+};
+function applyVoice(t) {
+  const v = A.acid, c = Object.assign({ tri: 0, saw: 1, pre: 0.5, eq: 0, dry: 1, form: 0, qMul: 1 }, VOICE_SET[S.voiceMode]);
+  const tg = (p, val) => p.setTargetAtTime(val, t, 0.3);
+  tg(v.osc3g.gain, c.tri); tg(v.mix.gain, c.saw * (1 - 0.45 * P.wave.v));
+  tg(v.eq.gain, c.eq); tg(v.dryG.gain, c.dry); tg(v.formOut.gain, c.form);
+  v.pre.curve = curve(c.pre); v.shaper.curve = curve(P.drive.v); v.qMul = c.qMul;
+  if (S.voiceMode === 'vocal' && Math.random() < 0.5) { const w = pick(VOWELS); v.form.forEach((b, i) => b.frequency.setTargetAtTime(w[i], t, 0.15)); }
+}
+
+// ---------- instruments
+function noiseHit(t, o) {
+  const ctx = A.ctx, s = ctx.createBufferSource(); s.buffer = A.noise; let n = s;
+  const chain = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q) b.Q.value = q; n.connect(b); n = b; };
+  if (o.hp) chain('highpass', o.hp);
+  if (o.bp) chain('bandpass', o.bp, o.q || 1);
+  if (o.lp) chain('lowpass', o.lp);
+  const gn = ctx.createGain(); gn.gain.setValueAtTime(o.peak, t); gn.gain.exponentialRampToValueAtTime(0.001, t + o.dec);
+  n.connect(gn);
+  if (o.pan !== undefined) gn.connect(A.pan(o.pan * P.width.v)).connect(o.bus || A.drums); else gn.connect(o.bus || A.drums);
+  if (o.rev) { const r = ctx.createGain(); r.gain.value = o.rev; gn.connect(r).connect(A.rev); }
+  s.start(t, Math.random() * 1.5); s.stop(t + o.dec + 0.05);
+}
+function duck(t) {
+  const d = A.duck.gain; d.cancelScheduledValues(t);
+  d.setValueAtTime(1, t); d.linearRampToValueAtTime(0.22, t + 0.012); d.setTargetAtTime(1, t + 0.02, 0.07);
+}
+// kick: the section picks a style (pitch start and drop speed, tail, sub weight, click, drive, rumble, tuning, ghosts,
+// splash); each hit jitters a little inside it
+function newKickStyle() {
+  A.kick = { p0: 140 + Math.random() * 90, td: 0.07 + Math.random() * 0.1, dec: 0.3 + Math.random() * 0.35,
+             sub: 42 + Math.random() * 14, click: pick([0.2, 0.5, 0.9]), drive: pick([2, 3.5, 6]),
+             rumble: pick([0, 0, 0.4, 0.8]), tuned: Math.random() < 0.3, ghost: pick([0, 0, 0.15, 0.3]), splash: Math.random() < 0.4 };
+  A.kickShaper.curve = curve(A.kick.drive);
+}
+function kick(t, lvl = 1) {
+  const ctx = A.ctx, k = A.kick, jit = 0.95 + Math.random() * 0.1;
+  const o = ctx.createOscillator(), gn = ctx.createGain();                          // punch: fast pitch drop
+  o.type = 'sine'; o.frequency.setValueAtTime(k.p0 * jit, t); o.frequency.exponentialRampToValueAtTime(40, t + k.td);
+  gn.gain.setValueAtTime(1.5 * lvl, t); gn.gain.exponentialRampToValueAtTime(0.001, t + k.dec);
+  o.connect(gn).connect(A.kickShaper); o.start(t); o.stop(t + k.dec + 0.02);
+  const sf = k.tuned ? mtof(S.root - 12) : k.sub;                                    // sub: tuned to the key, or free
+  const s = ctx.createOscillator(), sg = ctx.createGain();
+  s.type = 'sine'; s.frequency.setValueAtTime(sf * 1.25, t); s.frequency.exponentialRampToValueAtTime(sf, t + 0.25);
+  sg.gain.setValueAtTime(0.001, t); sg.gain.linearRampToValueAtTime(lvl, t + 0.008); sg.gain.exponentialRampToValueAtTime(0.001, t + k.dec);
+  s.connect(sg).connect(A.kickShaper); s.start(t); s.stop(t + k.dec + 0.02);
+  if (k.click) noiseHit(t, { hp: 2500, peak: 0.65 * k.click * lvl, dec: 0.02 });
+  if (k.rumble) noiseHit(t + 0.01, { lp: 140, peak: 0.55 * k.rumble * lvl, dec: 0.35 });   // techno rumble under the tail
+  if (lvl >= 0.6) { duck(t); S.flashQ.push(t); }
+}
+function tone(t, f0, f1, peak, dec, p) {           // pitched body for claps, snares, toms
+  const ctx = A.ctx, o = ctx.createOscillator(), gn = ctx.createGain();
+  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dec * 0.5);
+  gn.gain.setValueAtTime(peak, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dec);
+  o.connect(gn).connect(A.pan(p * P.width.v)).connect(A.drums); o.start(t); o.stop(t + dec + 0.02);
+}
+// hats: the section picks a style (shaker share, brightness, tail, click, darkness), each hit then varies within it
+function newHatStyle() {
+  A.hatStyle = { shaker: pick([0, 0.15, 0.35]), hp: pick([5000, 6500, 8000, 9500]),
+                 tail: pick([0.6, 1, 1.6]), click: pick([0, 0.25, 0.5]), dark: Math.random() < 0.35 };
+  if (A.hatLfo) A.hatLfoMul = pick([0.5, 1, 2, 3, 4]);
+}
+function shaker(t, peak, p) {                              // soft attack, no transient
+  const ctx = A.ctx, s = ctx.createBufferSource(); s.buffer = A.noise;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 4500 + Math.random() * 2500; f.Q.value = 1.2;
+  const gn = ctx.createGain(); gn.gain.setValueAtTime(0.001, t); gn.gain.linearRampToValueAtTime(peak, t + 0.018);
+  gn.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  s.connect(f).connect(gn).connect(A.pan(p * P.width.v)).connect(A.hatIn); s.start(t, Math.random() * 1.5); s.stop(t + 0.15);
+}
+function hat(t, open, p = 0, vel = 1) {
+  const st = A.hatStyle, r = Math.random();
+  const dec = open ? 0.12 + Math.random() * 0.4 : (0.022 + Math.random() * 0.06) * st.tail;
+  const peak = (open ? 0.42 : 0.34) * vel * (0.7 + Math.random() * 0.5);
+  if (!open && r < st.shaker) shaker(t, peak * 0.8, p);
+  else {
+    const o = { hp: st.hp * (0.8 + Math.random() * 0.5), peak, dec, pan: p, bus: A.hatIn };
+    if (st.dark && Math.random() < 0.5) o.lp = 9000 + Math.random() * 4000;           // takes the top off some hits
+    if (Math.random() < 0.25) { o.bp = 7000 + Math.random() * 4000; o.q = 0.6 + Math.random() * 0.7; o.peak *= 1.2; }
+    noiseHit(t, o);
+  }
+  if (!open && Math.random() < st.click) noiseHit(t, { hp: 2500, lp: 7000, peak: peak * 0.8, dec: 0.007, pan: p, bus: A.hatIn });
+}
+function clap(t) {
+  [-0.6, 0.6, -0.2].forEach((p, i) => noiseHit(t + i * 0.011, { bp: 1300, q: 1, peak: 0.7, dec: 0.05, pan: p }));
+  noiseHit(t + 0.03, { bp: 1500, q: 0.8, peak: 0.8, dec: 0.22, rev: 0.7, pan: 0.3 });
+  noiseHit(t, { lp: 400, peak: 0.6, dec: 0.08 });                 // low-mid thump under the clap
+  tone(t, 210, 150, 0.5, 0.12, 0);
+}
+const snare = (t, peak = 0.45, p = 0) => {
+  noiseHit(t, { bp: 1900, q: 0.7, peak: peak * 1.3, dec: 0.14, rev: 0.4, pan: p });
+  noiseHit(t, { lp: 500, peak: peak * 0.9, dec: 0.09, pan: p * 0.5 });
+  tone(t, 200, 125, peak * 1.2, 0.14, p * 0.5);
+};
+const tom = (t, p) => { tone(t, 150, 62, 1.1, 0.32, p); noiseHit(t, { lp: 900, peak: 0.3, dec: 0.04, pan: p }); };
+const rim = (t, p) => { tone(t, 900, 420, 0.5, 0.035, p); noiseHit(t, { bp: 2600, q: 4, peak: 0.5, dec: 0.03, pan: p }); };
+function subHit(t, midi) {
+  const s = A.sub, lvl = P.sub.v * 0.6;
+  s.osc.frequency.setValueAtTime(mtof(midi), t);
+  s.g.gain.cancelScheduledValues(t); s.g.gain.setValueAtTime(0.001, t);
+  s.g.gain.linearRampToValueAtTime(lvl, t + 0.006); s.g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+}
+function roar(t, len, gap, top) {
+  // the build's engine, drawn fresh each cycle (S.roarStyle): an oscillator stack and broadband noise through a saturator,
+  // with an optional throb (slow AM) that speeds up as the filter opens; optionally a sub drone. Everything rises together.
+  const ctx = A.ctx, c = S.roarStyle, gn = (v) => { const n = ctx.createGain(); n.gain.value = v; return n; }, nodes = [];
+  const end = t + len - gap;
+  const out = ctx.createGain(); out.gain.setValueAtTime(0.001, t); out.gain.exponentialRampToValueAtTime(0.95, end - 0.02);
+  out.gain.setValueAtTime(0.95, end - 0.01); out.gain.linearRampToValueAtTime(0, end);
+  const drive = ctx.createWaveShaper(); drive.curve = curve(c.drive);
+  const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.Q.value = 0.7;   // post-saturation lowpass: keeps the roar warm
+  tone.frequency.setValueAtTime(700, t); tone.frequency.exponentialRampToValueAtTime(Math.min(top, c.top), end);
+  const am = gn(1);
+  if (c.throb) {
+    const amL = ctx.createOscillator(), amG = ctx.createGain(); am.gain.value = 0.75;
+    amL.frequency.setValueAtTime(1.5 * c.throb, t); amL.frequency.exponentialRampToValueAtTime(7 * c.throb, t + len);
+    amG.gain.setValueAtTime(0.04, t); amG.gain.linearRampToValueAtTime(0.16, t + len);
+    amL.connect(amG).connect(am.gain); nodes.push(amL);
+  }
+  drive.connect(tone).connect(am).connect(out).connect(A.master);
+  const r = gn(0.45); out.connect(r).connect(A.rev);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.4;
+  lp.frequency.setValueAtTime(160, t); lp.frequency.exponentialRampToValueAtTime(5000, end); lp.connect(drive);
+  const f0 = mtof(S.root + c.pitch), spread = c.wide ? 1 : 0.4;
+  [[-1, -30], [-0.6, -14], [-0.2, 6], [0.2, -6], [0.6, 14], [1, 30]].forEach(([p, det], i) => {
+    const o = ctx.createOscillator(); o.type = c.wave === 'mixed' ? (i % 2 ? 'square' : 'sawtooth') : c.wave; o.detune.value = det; o.frequency.value = f0;
+    o.connect(gn(c.saws)).connect(A.pan(p * spread)).connect(lp); nodes.push(o);
+  });
+  const low = ctx.createOscillator(); low.type = 'sawtooth'; low.frequency.value = f0 / 2;   // octave-down weight
+  low.connect(gn(c.saws * 1.5)).connect(lp); nodes.push(low);
+  [-1, 1].forEach(p => {                                                          // broadband noise, independent per side
+    const s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
+    const nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(350, t); nf.frequency.exponentialRampToValueAtTime(c.pink ? 2500 : 8000, end);
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.001, t); ng.gain.exponentialRampToValueAtTime(c.noise, end);
+    s.connect(nf).connect(ng).connect(A.pan(p)).connect(drive); s.start(t, Math.random() * 1.5); s.stop(t + len + 0.1);
+  });
+  if (c.drone) {                                                                  // sub drone straight to the output, past the saturator
+    const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = mtof(S.root - 12);
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.001, t); sg.gain.linearRampToValueAtTime(0.6, t + len);
+    sub.connect(sg).connect(out); nodes.push(sub);
+  }
+  nodes.forEach(n => { n.start(t); n.stop(t + len + 0.1); });
+}
+function reverseCymbal(t, len) {                           // air under the bloom (S.airStyle): dark, soft, rising, cut dead at the drop
+  const ctx = A.ctx, c = S.airStyle;
+  [[-0.8, c.hp], [0.8, c.hp * 1.4]].forEach(([p, hp], i) => {
+    const s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+    const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.Q.value = 0.5;
+    if (c.sweep === 'rise') { b.frequency.setValueAtTime(c.lp * 0.3, t); b.frequency.exponentialRampToValueAtTime(c.lp, t + len); } else b.frequency.value = c.lp;
+    const gn = ctx.createGain(); gn.gain.setValueAtTime(0.001, t); gn.gain.exponentialRampToValueAtTime(c.level, t + len - 0.01);
+    gn.gain.linearRampToValueAtTime(0, t + len);
+    const pn = A.pan(p);
+    if (c.sweep === 'cross') { pn.pan.setValueAtTime(p, t); pn.pan.linearRampToValueAtTime(-p, t + len); }   // the two sides swap
+    s.connect(f).connect(b).connect(gn).connect(pn).connect(A.master);
+    const r = ctx.createGain(); r.gain.value = 0.7; gn.connect(r).connect(A.rev);
+    s.start(t, Math.random() * 1.5); s.stop(t + len + 0.05);
+  });
+}
+function bloom(t, len) {
+  // the sound the tail builds to (S.bloomStyle): a wide, chorused chord with its own sub, run through a vowel that opens as it
+  // rises, soft saturation for body, lots of reverb. It only ever rises, and is cut dead at the drop.
+  const ctx = A.ctx, c = S.bloomStyle, gn = (v) => { const n = ctx.createGain(); n.gain.value = v; return n; }, nodes = [];
+  const out = ctx.createGain(); out.gain.setValueAtTime(0.001, t); out.gain.exponentialRampToValueAtTime(0.8, t + len - 0.01);
+  out.gain.linearRampToValueAtTime(0, t + len);
+  const body = ctx.createWaveShaper(); body.curve = curve(c.body); body.connect(out).connect(A.master);
+  const r = gn(1.0); out.connect(r).connect(A.rev);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8;
+  lp.frequency.setValueAtTime(220, t); lp.frequency.exponentialRampToValueAtTime(c.top, t + len);
+  lp.connect(gn(c.formants ? 0.35 : 0.9)).connect(body);
+  if (c.formants) {                                                               // three formants gliding between two vowels
+    const paths = [[[440, 730], [1020, 1090], [2240, 2440]], [[270, 570], [2290, 840], [3010, 2410]], [[730, 270], [1090, 2290], [2440, 3010]]][c.vowel];
+    paths.forEach(([f0, f1], i) => {
+      const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.Q.value = 6;
+      b.frequency.setValueAtTime(f0, t); b.frequency.exponentialRampToValueAtTime(f1, t + len);
+      lp.connect(b).connect(gn([1, 0.5, 0.25][i] * 1.6)).connect(body);
+    });
+  }
+  const pans = [-0.9, 0.9, -0.4, 0.4, 0], dets = [-14, 10, 16, -9, 6];
+  c.chord.forEach((iv, i) => {
+    const o = ctx.createOscillator(); o.type = c.wave; o.frequency.value = mtof(S.root + iv); o.detune.value = dets[i];
+    const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = c.vibRate * (0.7 + Math.random() * 0.6); vg.gain.value = 7;
+    vib.connect(vg).connect(o.detune); o.connect(gn(0.6)).connect(A.pan(pans[i] * c.width)).connect(lp); nodes.push(o, vib);
+  });
+  const oct = ctx.createOscillator(); oct.type = 'triangle'; oct.frequency.value = mtof(S.root + 12);   // octave-down weight
+  oct.connect(gn(1.2)).connect(lp); nodes.push(oct);
+  if (c.sub) {
+    const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = mtof(S.root);         // a sub under the chord
+    const sg = ctx.createGain(); sg.gain.setValueAtTime(0.001, t); sg.gain.exponentialRampToValueAtTime(0.7, t + len - 0.01);
+    sg.gain.linearRampToValueAtTime(0, t + len); sub.connect(sg).connect(A.master); nodes.push(sub);
+  }
+  nodes.forEach(n => { n.start(t); n.stop(t + len + 0.05); });
+}
+function impact(t) {                                      // the down-sweep that opens the drop
+  const ctx = A.ctx, s = ctx.createBufferSource(); s.buffer = A.noise;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 1;
+  f.frequency.setValueAtTime(9000, t); f.frequency.exponentialRampToValueAtTime(140, t + 1.3);
+  const gn = ctx.createGain(); gn.gain.setValueAtTime(0.6, t); gn.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+  const pn = A.pan(0); pn.pan.setValueAtTime(Math.random() < 0.5 ? -1 : 1, t); pn.pan.linearRampToValueAtTime(0, t + 1.2);
+  s.connect(f).connect(gn).connect(pn).connect(A.master);
+  const r = ctx.createGain(); r.gain.value = 0.8; gn.connect(r).connect(A.rev);
+  s.start(t); s.stop(t + 1.5);
+}
+function acidStep(t, dur, st, slideIn, slideOut, phase) {
+  const v = A.acid;
+  if (!st.gate) return;
+  const m = S.voiceMode;
+  const f = mtof(S.root + st.note + 12 * st.oct);
+  for (const o of [v.osc, v.osc2, v.osc3]) {
+    o.frequency.cancelScheduledValues(t);
+    if (slideIn) { o.frequency.setValueAtTime(v.lastF, t); o.frequency.exponentialRampToValueAtTime(f, t + Math.min(0.12, dur * 0.7)); }
+    else if (m === 'plonky') { o.frequency.setValueAtTime(f * 1.8, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.028); }   // the plonk
+    else o.frequency.setValueAtTime(f, t);
+  }
+  v.lastF = f;
+  const lvl = st.acc ? 1 : 0.68, sus = st.acc ? 0.6 : 0.45;
+  v.vca.gain.cancelScheduledValues(t);
+  if (slideIn) { v.vca.gain.setValueAtTime(lvl, t); v.vca.gain.setTargetAtTime(lvl * 0.75, t, P.vdecay.v); }
+  else {
+    v.vca.gain.setValueAtTime(0, t); v.vca.gain.linearRampToValueAtTime(lvl, t + 0.004);
+    v.vca.gain.setTargetAtTime(lvl * sus, t + 0.004, P.vdecay.v);                   // pluck when short, held when long
+  }
+  if (!slideOut) {
+    const g = Math.min(0.94, Math.max(0.1, P.gate.v * (st.len || 1)));            // step's own length scaled by the gate drift
+    v.vca.gain.setTargetAtTime(0, t + dur * g, 0.006);
+  }
+  if (!slideIn || st.acc) {
+    const base = P.cutoff.v * S.cutMul;
+    const peak = Math.min(15000, base * (1 + P.env.v * (st.acc ? 2.2 : 1)));
+    const dec = P.decay.v * (st.acc ? 0.7 : 1) * (m === 'plonky' ? 0.45 : 1);
+    v.filt.frequency.cancelScheduledValues(t); v.filt.frequency.setValueAtTime(peak, t);
+    v.filt.frequency.setTargetAtTime(base, t, dec);
+  }
+  v.filt.Q.setTargetAtTime(Math.min(35, P.res.v * v.qMul), t, 0.05);
+}
+
+// ---------- the clock
+// a cycle is 24 bars full on, a breakdown, then a build of variable length; the drop starts the next cycle
+const BUILDS = [8, 8, 12, 12, 16, 16];
+function newCycle(bar) {
+  S.cycStart = bar; S.bl = pick(BUILDS); S.bd = S.bl >= 12 ? 8 : 4; S.cycLen = 24 + S.bd + S.bl;
+  // the tail is the end of the build: how many bars, and what happens in them
+  //   stab: one note screams upward over the roar and decays on into the drop
+  //   echo: the riff's last notes are swallowed by a near-infinite delay and decay under the bloom
+  S.tl = S.bl >= 16 ? pick([6, 8, 8, 12]) : S.bl >= 12 ? pick([4, 6, 8, 8]) : pick([2, 4, 4, 6]);
+  S.tailMode = pick(['stab', 'stab', 'echo']);
+  if (S.tailMode === 'stab') S.tl = Math.max(2, S.tl - 2);                 // stab: shorter tail, longer onset, more music
+  // the breakdown is drawn fresh too: how the riff changes, what the pad does, what the drums leave behind, and the fill into it
+  S.bdStyle = { cut: pick([2.4, 2.4, 0.35, 1.2]), send: pick([1.7, 1.0, 2.3]), pad: 0.12 + Math.random() * 0.14,
+                fill: pick(['toms', 'snares', 'swell', 'none', 'stop']), hats: pick(['open', 'none', 'shaker']),
+                pulse: Math.random() < 0.5, octUp: Math.random() < 0.3, sparse: Math.random() < 0.35 };
+  S.buildKick = Math.random() < 0.5;                                        // the build either keeps four-on-the-floor throughout, or has no kick
+  S.roarStyle = { wave: pick(['sawtooth', 'sawtooth', 'square', 'mixed']), pitch: pick([12, 12, 0, 7]), noise: 0.4 + Math.random() * 0.8,
+                  saws: 0.25 + Math.random() * 0.35, throb: pick([0, 1, 1, 2]), top: 2500 + Math.random() * 2500, drive: 2 + Math.random() * 3,
+                  drone: Math.random() < 0.7, pink: Math.random() < 0.4, wide: Math.random() < 0.6 };
+  S.bloomStyle = { chord: pick([[24, 31, 36, 43, 48], [24, 27, 31, 36, 39], [24, 29, 31, 36, 41], [24, 31, 38, 43, 48], [24, 31, 36, 46, 48]]),
+                   wave: pick(['sawtooth', 'sawtooth', 'square', 'triangle']), vowel: pick([0, 0, 1, 2]), formants: Math.random() < 0.75,
+                   top: 2500 + Math.random() * 3500, sub: Math.random() < 0.7, vibRate: 0.2 + Math.random() * 0.8, width: 0.4 + Math.random() * 0.6,
+                   body: 1.5 + Math.random() * 2 };
+  S.airStyle = { hp: 1000 + Math.random() * 2000, lp: 4000 + Math.random() * 5000, level: 0.2 + Math.random() * 0.3,
+                 sweep: pick(['still', 'still', 'cross', 'rise']) };
+  // the roar stops this many beats before the drop, leaving only what the tail mode keeps and the bloom
+  S.gapBeats = Math.max(1, Math.min(pick([2, 4, 4, 6]), S.tl * 4 - 4));
+  // every stab and every echo is drawn fresh
+  S.stab = { from: pick([12, 12, 24, 7]), by: pick([12, 12, 7, 5, 19, -12, 0]),          // start interval, slide interval (0 = held)
+             wave: pick([['sawtooth', 1, 'square', 0.4], ['sawtooth', 1, 'triangle', 0.6], ['square', 0.8, 'sawtooth', 0.3], ['sawtooth', 0.7, 'sawtooth', 0.7]]),
+             q: 1 + Math.random() * 1.3, top: 5000 + Math.random() * 8000, drive: 2 + Math.random() * 8,
+             vib: 4 + Math.random() * 20, vibRate: 2 + Math.random() * 6, tail: 4 + Math.random() * 12, wander: Math.random() < 0.5,
+             octave: Math.random() < 0.35 };
+  S.echo = { fb: 0.6 + Math.random() * 0.18, lp: 1500 + Math.random() * 1800, send: 0.18 + Math.random() * 0.22,
+             taps: pick([[0.75, 0.75], [0.5, 0.75], [0.375, 0.75], [0.5, 0.5], [1, 0.75], [0.75, 0.5]]),   // L and R tap lengths in beats
+             wobble: pick([0, 0, 0.003, 0.008]), wobbleRate: 0.1 + Math.random() * 0.5 };
+}
+function crash(t, p) {
+  noiseHit(t, { hp: 4500, peak: 0.9, dec: 1.4, rev: 0.9, pan: p });
+  noiseHit(t, { bp: 6500, q: 0.5, peak: 0.6, dec: 0.5, pan: -p });
+}
+function boom(t) {                                         // the sub thud under the drop
+  const ctx = A.ctx, o = ctx.createOscillator(), gn = ctx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(75, t); o.frequency.exponentialRampToValueAtTime(27, t + 0.9);
+  gn.gain.setValueAtTime(1.4, t); gn.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+  o.connect(gn).connect(A.kickShaper); o.start(t); o.stop(t + 1.25);
+}
+function scream(t, onset, len, tail) {
+  // the stab: a second 303 voice, drawn fresh each time (see S.stab). It fades in from nothing over the onset (the whole
+  // build before the tail), holding its pitch; over the tail it slides by its interval with the filter opening; then it
+  // decays past the drop.
+  const ctx = A.ctx, c = S.stab, gn = (v) => { const n = ctx.createGain(); n.gain.value = v; return n; }, nodes = [];
+  const f0 = mtof(S.root + c.from), f1 = mtof(S.root + c.from + c.by), rise = t + onset, end = rise + len;
+  const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.Q.value = Math.min(32, P.res.v * c.q);
+  filt.frequency.setValueAtTime(P.cutoff.v * 0.6, t); filt.frequency.exponentialRampToValueAtTime(P.cutoff.v * 1.5, rise);
+  filt.frequency.exponentialRampToValueAtTime(c.top, end); filt.frequency.exponentialRampToValueAtTime(600, end + tail);
+  const vca = ctx.createGain(); vca.gain.setValueAtTime(onset > 20 ? 0.0005 : 0.002, t); vca.gain.exponentialRampToValueAtTime(1, rise);
+  vca.gain.setValueAtTime(1, end); vca.gain.exponentialRampToValueAtTime(0.001, end + tail);
+  const sh = ctx.createWaveShaper(); sh.curve = curve(c.drive);
+  const pn = A.pan(0), post = gn(0.42); filt.connect(vca).connect(sh).connect(post).connect(pn).connect(A.duck);
+  if (c.wander) { const pl = ctx.createOscillator(), pg = gn(0.7); pl.frequency.value = 0.08 + Math.random() * 0.15; pl.connect(pg).connect(pn.pan); nodes.push(pl); }
+  post.connect(gn(0.5)).connect(A.delay); post.connect(gn(0.4)).connect(A.rev);
+  const voices = [[c.wave[0], c.wave[1], 1], [c.wave[2], c.wave[3], 1]];
+  if (c.octave) voices.push(['sawtooth', 0.35, 2]);                          // a thin octave above
+  const oscs = voices.map(([type, lvl, mul]) => {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0 * mul, t); o.frequency.setValueAtTime(f0 * mul, rise);
+    o.frequency.exponentialRampToValueAtTime(f1 * mul, end); o.connect(gn(lvl)).connect(filt); nodes.push(o); return o;
+  });
+  const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.setValueAtTime(c.vibRate * 0.5, t);
+  vib.frequency.setValueAtTime(c.vibRate * 0.5, rise); vib.frequency.exponentialRampToValueAtTime(c.vibRate, end);
+  vg.gain.setValueAtTime(c.vib * 0.4, t); vg.gain.linearRampToValueAtTime(c.vib, end);
+  oscs.forEach(o => vib.connect(vg).connect(o.detune)); nodes.push(vib);
+  nodes.forEach(n => { n.start(t); n.stop(end + tail + 0.1); });
+}
+function onBar(bar, cyc, t, bpm, phase, bpos) {
+  const beat = 60 / bpm, bl = S.bl, bStart = 24 + S.bd;
+  if (cyc === 0 && bar > 0) {                               // the drop
+    impact(t); crash(t, 0.7); boom(t);
+    if (S.pendingRiff || Math.random() < 0.5) { S.pat = genPattern(); S.pendingRiff = false; }
+    if (Math.random() < 0.4) S.root = Math.max(31, Math.min(40, S.root + pick([-5, -3, -2, 2, 3, 5])));
+    if (Math.random() < 0.7) A.pad.voicing = pick(VOICINGS);
+    if (Math.random() < 0.6) { const w = pick(PADWAVES); A.pad.oscs.forEach((x, i) => x.o.type = w[i]); }
+    A.pad.filt.type = Math.random() < 0.25 ? 'bandpass' : 'lowpass';
+    A.pad.tremMul = pick([0.5, 1, 2, 4]);
+    retunePad(t, 0.3); newHatStyle(); newKickStyle();
+    if (Math.random() < 0.7) S.voiceMode = pick(VOICES);
+    A.dfb.gain.setTargetAtTime(0.2, t, 0.05); A.dfb.gain.setTargetAtTime(0.5, t + 2 * beat, 0.5);      // clear the echo pile fast
+    A.dout.gain.setTargetAtTime(0.3, t, 0.05); A.dout.gain.setTargetAtTime(0.85, t + 2 * beat, 0.6);
+    A.dlpL.frequency.setTargetAtTime(3800, t, 0.5); A.dlpR.frequency.setTargetAtTime(3800, t, 0.5);
+    A.dWobG.gain.setTargetAtTime(0, t, 0.3);
+    A.acid.post.gain.cancelScheduledValues(t); A.acid.post.gain.setValueAtTime(0.42, t);
+  } else if (S.pendingRiff && cyc % 4 === 0) { S.pat = genPattern(); S.pendingRiff = false; }
+  if (cyc % 8 === 0 && cyc > 0 && phase === 'full' && Math.random() < 0.35) { A.pad.voicing = pick(VOICINGS); retunePad(t, 1.2); }
+  if (cyc % 8 === 0 && cyc > 0 && phase === 'full' && Math.random() < 0.4) newHatStyle();
+  if (cyc % 8 === 0 && cyc > 0 && phase === 'full' && Math.random() < 0.3) S.voiceMode = pick(VOICES);
+  if (cyc % 8 === 0 && cyc > 0 && phase === 'full' && Math.random() < 0.3) newKickStyle();
+  if (phase === 'build') {
+    if (bpos === 0) roar(t, bl * 4 * beat, S.gapBeats * beat, S.tailMode === 'echo' ? 2200 : 4200);   // darker under an echo tail
+    if (!(S.tailMode === 'echo' && bpos >= bl - S.tl - 2)) A.dfb.gain.setTargetAtTime(0.5 + 0.2 * bpos / bl, t, 1);
+  }
+  if (bar % 2 === 1 && Math.random() < 0.85) mutate(S.pat);
+  // pad sweep: 8-bar LFO crossed with the drifting centre, forced upward through breakdown and build
+  const pf = A.pad.filt.frequency, pg = A.pad.g.gain, bp = A.pad.filt.type === 'bandpass';
+  if (phase === 'breakdown') pf.exponentialRampToValueAtTime(1000 * Math.pow(5, (cyc - 23) / S.bd), t + 4 * beat);   // from wherever it is, upward
+  else if (phase === 'build') pf.exponentialRampToValueAtTime(5000 + 9000 * (bpos + 1) / bl, t + 4 * beat);
+  else pf.setTargetAtTime(P.sweep.v * Math.pow(3, Math.sin(bar * Math.PI / 4)), t, beat);
+  pg.linearRampToValueAtTime((phase === 'breakdown' ? S.bdStyle.pad : phase === 'build' ? 0.14 * (1 - bpos / bl) : phase === 'full' && cyc >= 22 ? 0.08 + (S.bdStyle.pad - 0.08) * (cyc - 21) / 2 : 0.08) * (bp ? 1.8 : 1), t + (cyc >= 22 && phase === 'full' ? 4 : 1) * beat);
+  // pad character: chorus depth, resonance, grit, and a tremolo locked to the beat (accelerating through the build)
+  A.pad.filt.Q.setTargetAtTime(P.padQ.v, t, 1);
+  A.pad.oscs.forEach(x => x.dg.gain.setTargetAtTime(P.padDet.v, t, 1));
+  A.pad.shaper.curve = curve(1 + P.drive.v * 0.35);
+  const depth = phase === 'build' ? 0.2 + 0.7 * P.padTrem.v : phase === 'breakdown' ? 0.35 * P.padTrem.v : P.padTrem.v;
+  A.pad.trem.gain.setTargetAtTime(1 - depth / 2, t, 0.3);
+  A.pad.tlfoG.gain.setTargetAtTime(depth / 2, t, 0.3);
+  const trate = A.pad.tremMul * (phase === 'build' ? 1 + 3 * bpos / bl : 1) / beat;
+  A.pad.tlfo.frequency.setTargetAtTime(Math.min(trate, 8 / beat), t, 0.3);
+  // hat bus: tone drifts, and a filter wobble locked to the beat whose depth drifts
+  A.hatLP.frequency.setTargetAtTime(P.hatTone.v, t, 1);
+  A.hatLfoG.gain.setTargetAtTime(P.hatMove.v * P.hatTone.v * 0.5, t, 1);
+  A.hatLfo.frequency.setTargetAtTime(A.hatLfoMul / beat, t, 0.3);
+  // slow-moving voice character
+  applyVoice(t);
+  A.acid.osc2g.gain.setTargetAtTime(P.wave.v, t, 0.5);
+  if (!(phase === 'build' && S.tailMode === 'echo' && bpos >= bl - S.tl - 2)) {   // an echo tail owns the delay times
+    A.dL.delayTime.setTargetAtTime(beat * 0.75, t, 0.3);
+    A.dR.delayTime.setTargetAtTime(beat * 0.75, t, 0.3);
+  }
+  A.acid.lfoG.gain.setTargetAtTime(0.7 * P.width.v, t, 1);
+  A.acid.lfo.frequency.setTargetAtTime(0.05 + 0.25 * P.width.v * P.width.v, t, 2);
+  S.label = phase === 'build' ? `Build, bar ${bpos + 1} of ${bl}` + (bpos >= bl - S.tl ? `, ${S.tailMode} (roar out for the last ${S.gapBeats} beats)` : '') : phase === 'breakdown' ? `Breakdown, bar ${cyc - 23} of ${S.bd}` : `Full on, bar ${cyc + 1} of 24, ${S.voiceMode} voice`;
+}
+function schedule(step, t, dur, bpm) {
+  const bar = Math.floor(step / 16), s = step % 16;
+  if (s === 0 && bar - S.cycStart >= S.cycLen) newCycle(bar);
+  const cyc = bar - S.cycStart, bStart = 24 + S.bd, bl = S.bl;
+  const phase = cyc < 24 ? 'full' : cyc < bStart ? 'breakdown' : 'build';
+  const bpos = cyc - bStart, frac = phase === 'build' ? (bpos + s / 16) / bl : 0;
+  S.phase = phase; S.frac = frac;
+  // the way into the breakdown: over the last two full-on bars the cutoff and delay drift up and the drums thin out
+  const into = phase === 'full' && cyc >= 22 ? ((cyc - 22) * 16 + s) / 32 : 0;
+  const bd = S.bdStyle;
+  S.cutMul = phase === 'breakdown' ? bd.cut : phase === 'build' ? 1 + 1.1 * frac : 1 + (bd.cut - 1) * into;
+  S.sendMul = phase === 'breakdown' ? bd.send : phase === 'build' ? 1 + 0.3 * frac : 1 + (bd.send - 1) * into;
+  const thin = 1 - into * 0.85;
+  if (s === 0) onBar(bar, cyc, t, bpm, phase, bpos);
+  // the fade: starting before the tail (3 bars for echo, 1 for stab) and ending on the build's last beat, the melody and the drums
+  // thin out slowly under the roar while the bloom rises
+  const bs = bpos * 16 + s, fadeStart = Math.max(0, (bl - S.tl) * 16 - (S.tailMode === 'echo' ? 48 : 16)), fadeLen = bl * 16 - 4 - fadeStart;   // ends on the last beat
+  const fade = phase !== 'build' ? 1 : bs < fadeStart ? 1 : Math.max(0, 1 - (bs - fadeStart) / fadeLen);
+  if (phase === 'build' && S.tailMode === 'stab') {                            // the scream starts a whole tail-length before the tail
+    if (bs === 0) scream(t, (bl - S.tl) * 16 * dur, S.tl * 16 * dur, S.stab.tail * dur);   // fades in across the whole build before the tail; decays 1-4 beats past the drop
+  }
+  if (phase === 'build' && bs === fadeStart) {
+    const pg = A.acid.post.gain; pg.cancelScheduledValues(t); pg.setValueAtTime(0.42, t);
+    pg.exponentialRampToValueAtTime(0.02, t + fadeLen * dur * 0.85); pg.linearRampToValueAtTime(0, t + fadeLen * dur);   // perceptually even
+    reverseCymbal(t, (bl * 16 - fadeStart) * dur); bloom(t, (bl * 16 - fadeStart) * dur);
+    if (S.tailMode === 'echo') {                              // the delay swallows the riff as it fades: feedback and send rise, loop darkens
+      const tau = fadeLen * dur / 3, e = S.echo, beat = 4 * dur;
+      A.dfb.gain.setTargetAtTime(e.fb, t, tau); A.acid.send.gain.setTargetAtTime(e.send, t, tau); A.dout.gain.setTargetAtTime(0.55, t, tau);
+      A.dlpL.frequency.setTargetAtTime(e.lp, t, tau); A.dlpR.frequency.setTargetAtTime(e.lp, t, tau);
+      A.dL.delayTime.setTargetAtTime(beat * e.taps[0], t, 0.02); A.dR.delayTime.setTargetAtTime(beat * e.taps[1], t, 0.02);
+      A.dWobG.gain.setTargetAtTime(e.wobble, t, tau); A.dWob.frequency.setTargetAtTime(e.wobbleRate, t, 0.5);
+    }
+  }
+  const echoing = phase === 'build' && S.tailMode === 'echo' && bs >= fadeStart;
+  S.q.push({ step: s, t });
+
+  const off = s % 4 === 2;
+  const hp = Math.sin(s * Math.PI / 8 + bar) * 0.8;          // hats sweep around per bar
+  const sp = (s % 2 ? 1 : -1) * (0.3 + s / 40);              // rolls widen as they accelerate
+
+  if (phase === 'full') {
+    const stop = cyc === 23 && bd.fill === 'stop' && s >= 12;         // the stop: the last beat before the breakdown is empty
+    if (stop) { /* nothing */ } else {
+    if (s % 4 === 0 && (into === 0 || Math.random() < thin + 0.3)) kick(t, thin);
+    if (s % 4 === 3 && Math.random() < A.kick.ghost * thin) kick(t, 0.35);     // ghost kick before the beat
+    if (A.kick.splash && cyc % 4 === 0 && s === 0) noiseHit(t, { lp: 700, peak: 0.5, dec: 0.3, rev: 1.2 });   // reverb splash every 4 bars
+    if (cyc === 0 && s === 2) { kick(t); tom(t, 0); }        // doubled hit right after the drop
+    if ((s === 14 && Math.random() < 0.12) || (s === 11 && Math.random() < 0.07)) kick(t);
+    if ((s === 4 || s === 12) && Math.random() < thin + 0.4) clap(t);
+    if ((s === 7 || s === 15) && Math.random() < 0.22 * thin) tom(t, s === 7 ? -0.5 : 0.5);
+    if ((s === 3 || s === 13) && Math.random() < 0.3 * P.hats.v + 0.05) rim(t, s === 3 ? 0.6 : -0.6);
+    if (cyc === 23) {                                         // the fill into the breakdown, one of five
+      if (bd.fill === 'toms' && s >= 8 && s % 2 === 0) tom(t, (s - 11) / 4);
+      if (bd.fill === 'snares' && s >= 8) snare(t, 0.3 + s / 40, sp);
+      if (bd.fill === 'swell' && s === 0) reverseCymbal(t, 16 * dur);
+    }
+    if (off) hat(t, Math.random() < 0.35 * P.hats.v + 0.1, -hp, 1.15 * thin);
+    else if (s % 2 === 1 && Math.random() < P.hats.v * thin) hat(t, false, hp, (0.6 + Math.random() * 0.5) * thin);
+    else if (s % 4 === 0 && Math.random() < P.hats.v * 0.5 * thin) hat(t, false, hp * 0.3, 0.7 * thin);
+    }
+  } else if (phase === 'breakdown') {
+    if (bd.hats === 'open' && off && Math.random() < 0.5) hat(t, true, -hp);
+    if (bd.hats === 'shaker' && s % 2 === 0) shaker(t, 0.22 + Math.random() * 0.1, hp);
+    if (bd.pulse && cyc - 24 >= S.bd / 2 && s % 4 === 0) snare(t, 0.25, sp * 0.5);   // a distant pulse in the second half
+    if (s === 13 && Math.random() < 0.3) rim(t, hp);
+  } else {                                                   // the roar carries the build; percussion thins out under it
+    const late = frac >= 0.5, lastQ = frac >= 0.75, keep = Math.random() < fade;   // during the fade, hits thin out and soften
+    if (S.buildKick && s % 4 === 0 && fade > 0.05) kick(t, fade);   // the floor, if this build has one, runs unchanged until the fade
+    const div = frac < 0.25 ? 8 : frac < 0.5 ? 4 : 2;         // roll: halves, quarters, eighths
+    if (s % div === 0 && keep) snare(t, (0.25 + 0.55 * frac) * fade, sp);
+    if (lastQ && s % 4 === 2 && keep) tom(t, hp);
+    if (s % 2 === 0 && Math.random() < (0.25 + 0.5 * frac) * fade) hat(t, false, hp, (0.5 + 0.4 * frac) * fade);
+    if (lastQ && off && keep) hat(t, true, -hp, 0.8 * fade);
+    if (lastQ && s === 0 && fade > 0.5) crash(t, bpos % 2 ? 0.6 : -0.6);
+  }
+
+  // bass and lead
+  const st0 = S.pat[s], prev = S.pat[(s + 15) % 16], nxt = S.pat[(s + 1) % 16];
+  let st = (phase === 'build' && frac >= 0.5 && st0.acc) || (phase === 'full' && cyc === 0 && s < 2)
+    ? Object.assign({}, st0, { acc: true, oct: st0.oct || (phase === 'build' ? 1 : 0), gate: true }) : st0;
+  if (phase === 'breakdown') {
+    if (bd.sparse && !(st0.acc || s % 4 === 0)) st = Object.assign({}, st, { gate: false });   // only accents and downbeats
+    if (bd.octUp && st.gate) st = Object.assign({}, st, { oct: 1 });
+  }
+  if (phase === 'full' && off && Math.random() < thin + 0.2) subHit(t, S.root - 12);   // in the build the roar's drone owns the low end
+  acidStep(t, dur, st, prev.gate && prev.slide && st.gate, st.slide && nxt.gate, phase);
+  if (!echoing) A.acid.send.gain.setTargetAtTime(P.delay.v * S.sendMul, t, 0.1);
+}
+function tick() {
+  const ctx = A.ctx, now = ctx.currentTime, chaos = parseFloat($('#chaos').value);
+  const dt = Math.min(0.5, now - S.lastT); S.lastT = now;
+  for (const k in P) P[k].step(dt, chaos);
+  while (S.next < now + 0.16) {
+    const bpm = P.tempo.v, d = 60 / bpm / 4;
+    const dur = d * (S.step % 2 === 0 ? 1 + P.swing.v : 1 - P.swing.v);
+    schedule(S.step, S.next, dur, bpm);
+    S.next += dur; S.step++;
+  }
+}
+
+// ---------- transport
+const go = $('#go');
+async function toggle() {
+  if (!A.ctx) { build(); S.pat = genPattern(); newCycle(0); }
+  if (S.on) {
+    S.on = false; clearInterval(S.timer); await A.ctx.suspend();
+    go.textContent = 'Resume'; go.classList.remove('on'); go.setAttribute('aria-pressed', 'false');
+    $('#phase').textContent = 'Paused';
+    return;
+  }
+  await A.ctx.resume();
+  S.on = true; S.lastT = A.ctx.currentTime; S.next = A.ctx.currentTime + 0.05;
+  S.timer = setInterval(tick, 25);
+  go.textContent = 'Stop'; go.classList.add('on'); go.setAttribute('aria-pressed', 'true');
+}
+go.addEventListener('click', toggle);
+$('#vol').addEventListener('input', e => { if (A.master) A.master.gain.setTargetAtTime(parseFloat(e.target.value), A.ctx.currentTime, 0.05); });
+$('#riff').addEventListener('click', () => { S.pendingRiff = true; $('#riff').textContent = 'New riff queued'; setTimeout(() => $('#riff').textContent = 'New riff on next bar', 1500); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { e.preventDefault(); toggle(); } });
+
+// ---------- visuals
+const stepsEl = $('#steps'), stepCells = [];
+for (let i = 0; i < 16; i++) { const d = document.createElement('div'); stepsEl.appendChild(d); stepCells.push(d); }
+const driftEl = $('#drift'), rows = {};
+for (const k in P) {
+  const r = document.createElement('div'); r.className = 'row';
+  r.innerHTML = `<span class="n">${NAMES[k]}</span><span class="b"><i></i></span><span class="v"></span>`;
+  driftEl.appendChild(r); rows[k] = { bar: r.querySelector('i'), val: r.querySelector('.v') };
+}
+const cv = $('#scope'), c2 = cv.getContext('2d');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let fd, td, lastUI = 0;
+function resize() { const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1; cv.width = r.width * dpr; cv.height = r.height * dpr; }
+addEventListener('resize', resize); resize();
+function draw(ts) {
+  requestAnimationFrame(draw);
+  const W = cv.width, H = cv.height;
+  c2.fillStyle = reduce ? '#12061c' : 'rgba(18,6,28,0.32)'; c2.fillRect(0, 0, W, H);
+  if (!A.an) return;
+  const now = A.ctx.currentTime;
+  if (!fd) { fd = new Uint8Array(A.an.frequencyBinCount); td = new Uint8Array(A.an.fftSize); }
+  A.an.getByteFrequencyData(fd);
+  const nb = 96, bw = W / nb;
+  for (let i = 0; i < nb; i++) {
+    const idx = Math.floor(Math.pow(i / nb, 2) * 300), h = fd[idx] / 255 * H * 0.9;
+    c2.fillStyle = 'rgba(255,45,149,0.55)'; c2.fillRect(i * bw + 1, H - h, bw - 2, h);
+  }
+  let rms = [0, 0];
+  [[A.anL, '#2df5ff', 0], [A.anR, '#ffb3dc', 1]].forEach(([an, col, ch]) => {
+    an.getByteTimeDomainData(td);
+    c2.strokeStyle = col; c2.lineWidth = 2 * (devicePixelRatio || 1); c2.beginPath();
+    let e = 0;
+    for (let i = 0; i < td.length; i++) {
+      const s = (td[i] - 128) / 128; e += s * s;
+      const x = i / td.length * W, y = H / 2 + s * H * 0.45; i ? c2.lineTo(x, y) : c2.moveTo(x, y);
+    }
+    c2.stroke(); rms[ch] = Math.sqrt(e / td.length);
+  });
+  // balance: a bar that slides towards the louder side
+  const bal = (rms[1] - rms[0]) / (rms[0] + rms[1] + 1e-6), bh = 6 * (devicePixelRatio || 1);
+  c2.fillStyle = 'rgba(169,139,192,0.35)'; c2.fillRect(W * 0.3, bh, W * 0.4, bh);
+  c2.fillStyle = '#e8ff3a'; c2.fillRect(W * 0.5 + bal * W * 0.2 - bh, 0, bh * 2, bh * 3);
+  while (S.flashQ.length && S.flashQ[0] <= now) { S.flashQ.shift(); S.flash = 1; }
+  if (S.flash > 0.02 && !reduce) {
+    c2.strokeStyle = `rgba(232,255,58,${S.flash})`; c2.lineWidth = 10 * S.flash * (devicePixelRatio || 1);
+    c2.strokeRect(0, 0, W, H); S.flash *= 0.8;
+  }
+  while (S.q.length && S.q[0].t <= now) S.cur = S.q.shift().step;
+  if (S.pat) stepCells.forEach((d, i) => { const st = S.pat[i];
+    d.className = (st.gate ? (st.acc ? 'a' : 'g') : '') + (st.slide && st.gate ? ' s' : '') + (i === S.cur && S.on ? ' now' : ''); });
+  if (ts - lastUI > 120) {
+    lastUI = ts;
+    for (const k in P) { rows[k].bar.style.width = (P[k].u * 100).toFixed(1) + '%'; rows[k].val.textContent = P[k].fmt(P[k].v); }
+    if (S.on && S.label) $('#phase').textContent = S.label;
+  }
+}
+requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
