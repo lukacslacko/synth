@@ -3,99 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Acid Drift — Fractal</title>
+<title>Acid Drift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{ --ink:#08040d; --paper:#f4ecff; --mute:#9b86b4; --acid:#e8ff3a; --magenta:#ff2d95; --cyan:#2df5ff; }
+:root{
+  --ink:#12061c; --ink2:#22103a; --magenta:#ff2d95; --cyan:#2df5ff;
+  --acid:#e8ff3a; --paper:#fff4fb; --mute:#a98bc0;
+}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#000;color:var(--paper);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;overflow:hidden}
-canvas#gl,canvas.hdr{position:fixed;inset:0;width:100vw;height:100vh;display:block}
-#panel{position:fixed;top:14px;left:14px;z-index:10;width:300px;padding:12px 14px 10px;border-radius:10px;
-  background:rgba(8,4,13,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);
-  transition:opacity .35s;display:flex;flex-direction:column;gap:10px}
-#panel.hide{opacity:0;pointer-events:none}
-.top{display:flex;gap:12px;align-items:center}
-#go{font:700 15px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;padding:12px 16px;border:0;border-radius:6px;cursor:pointer;
-  background:var(--magenta);color:var(--ink);min-width:78px}
+html,body{margin:0;background:var(--ink);color:var(--paper);
+  font-family:"Space Grotesk",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.4}
+body{min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.display{font-family:Anton,Impact,"Arial Narrow Bold","Helvetica Neue",sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.01em}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;padding:20px 20px 10px}
+h1{font-size:clamp(52px,10vw,110px);line-height:.85;margin:0;color:var(--acid)}
+#phase{font-size:clamp(20px,3.4vw,34px);line-height:1;color:var(--magenta);margin:0 0 6px;min-height:1em}
+#scope{display:block;width:100%;height:clamp(180px,32vh,300px);background:var(--ink);border-top:2px solid var(--ink2);border-bottom:2px solid var(--ink2)}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;padding:16px 20px}
+#go{font-size:clamp(28px,5vw,44px);line-height:1;padding:14px 30px 12px;border:0;cursor:pointer;
+  background:var(--magenta);color:var(--ink);border-radius:4px;transition:transform .08s}
+#go:active{transform:scale(.97)}
 #go.on{background:var(--acid)}
-.ttl{min-width:0}
-.name{font-weight:700;letter-spacing:.04em;color:var(--acid);font-size:13px}
-.name span{color:var(--mute);font-weight:400;margin-left:4px}
-#phase{color:var(--mute);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.grid{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;color:var(--mute)}
-.grid label{display:contents}
-.grid label>span{font-size:12px}
-select,button.sm{background:rgba(255,255,255,.06);color:var(--paper);border:1px solid rgba(255,255,255,.14);border-radius:4px;padding:3px 6px;font:inherit;font-size:12px}
-select{width:100%}
-input[type=range]{width:100%;accent-color:var(--cyan);margin:0}
-.hdrrow{display:flex;align-items:center;gap:8px}
-.hdrrow input[type=checkbox]{accent-color:var(--acid);margin:0}
-.btns{display:flex;gap:8px;align-items:center}
-button.sm{cursor:pointer}
-button.sm:hover{background:rgba(255,255,255,.14)}
-#fps{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums;font-size:11px}
-.hint{color:#6d5b84;font-size:11px;line-height:1.4}
-#toast{position:fixed;left:50%;bottom:6vh;transform:translateX(-50%);z-index:9;padding:8px 16px;border-radius:999px;
-  background:rgba(8,4,13,.7);color:var(--paper);font-size:14px;letter-spacing:.02em;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
-#toast.show{opacity:1}
-#nogl[hidden]{display:none}
-#nogl{position:fixed;inset:0;display:grid;place-items:center;color:var(--paper);font-size:16px;text-align:center;padding:40px}
-:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+#go:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+.ctl{display:flex;align-items:center;gap:10px;color:var(--mute)}
+.ctl input[type=range]{accent-color:var(--cyan);width:130px}
+#riff{background:transparent;color:var(--cyan);border:2px solid var(--cyan);border-radius:4px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+#riff:hover{background:var(--cyan);color:var(--ink)}
+.steps{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;padding:4px 20px 14px}
+.steps div{height:22px;background:var(--ink2);border-radius:2px;transition:background .06s}
+.steps .g{background:#7a1d55}
+.steps .a{background:var(--magenta)}
+.steps .s{border-bottom:3px solid var(--cyan)}
+.steps .now{background:var(--acid)!important}
+.drift{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 30px;padding:4px 20px 30px}
+.row{display:grid;grid-template-columns:96px 1fr 62px;align-items:center;gap:10px;font-size:14px}
+.row .n{color:var(--mute)}
+.row .b{height:8px;background:var(--ink2);border-radius:4px;overflow:hidden}
+.row .b i{display:block;height:100%;width:50%;background:var(--cyan);border-radius:4px;transition:width .3s linear}
+.row .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--paper)}
+.hint{color:var(--mute);padding:0 20px 24px;max-width:60ch}
+@media (prefers-reduced-motion:reduce){.row .b i{transition:none}}
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
-<div id="panel">
-  <div class="top">
-    <button id="go" aria-pressed="false">Play</button>
-    <div class="ttl">
-      <div class="name">ACID DRIFT<span>fractal</span></div>
-      <div id="phase">Space to start the music</div>
-    </div>
-  </div>
-  <div class="grid">
-    <label><span>Fractal</span><select id="family">
-      <option value="0">Möbius IFS</option>
-      <option value="1">Rational IFS</option>
-      <option value="2">Flame IFS</option>
-      <option value="3">Kali</option>
-      <option value="4">Julia</option>
-    </select></label>
-    <label><span>Palette</span><select id="palette">
-      <option value="0">Acid</option>
-      <option value="1">Ember</option>
-      <option value="2">Ocean</option>
-      <option value="3" selected>Spectral (follows the key)</option>
-      <option value="4">Neon</option>
-      <option value="5">Mono</option>
-    </select></label>
-    <label><span>Maps</span><select id="maps">
-      <option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
-      <option value="5">5</option><option value="6">6</option>
-    </select></label>
-    <label id="fullrow"><span>Plane</span><span class="hdrrow"><input type="checkbox" id="full" checked><span>Full plane (Riemann sphere)</span></span></label>
-    <label><span>Drift</span><input id="drift" type="range" min="0" max="1" step="0.01" value="0.22" title="How much the slowly wandering synth parameters bend the shape"></label>
-    <label><span>Riff</span><input id="riff" type="range" min="0" max="1" step="0.01" value="0" title="How much the 16-step pattern shapes it (the playing step also nudges its map)"></label>
-    <label><span>Spectrum</span><input id="spectrum" type="range" min="0" max="1" step="0.01" value="1" title="How much the sound's frequency bands move it"></label>
-    <label><span>Colour</span><input id="color" type="range" min="0" max="1" step="0.01" value="0.42" title="Drive each map's colour the same way as its shape: hue and brightness follow that map's drift, riff and spectrum"></label>
-    <label><span>Pulse</span><input id="pulse" type="range" min="0" max="1" step="0.01" value="0" title="Beat-locked effects: kick pump, flashes, step nudges"></label>
-    <label><span>Motion</span><input id="speed" type="range" min="0" max="1" step="0.01" value="0"></label>
-    <label><span>Chaos</span><input id="chaos" type="range" min="0.2" max="4" step="0.05" value="1"></label>
-    <label><span>Volume</span><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
-    <label><span>Quality</span><select id="quality">
-      <option value="480">Low</option><option value="720">Medium</option>
-      <option value="960">High</option><option value="1200" selected>Ultra</option>
-    </select></label>
-    <label id="hdrrow" hidden><span>HDR</span><span class="hdrrow"><input type="checkbox" id="hdr"><input id="boost" type="range" min="1" max="4" step="0.1" value="4" title="HDR peak brightness"></span></label>
-  </div>
-  <div class="btns">
-    <button id="shape" class="sm">New shape</button>
-    <button id="newriff" class="sm">New riff</button>
-    <span id="fps"></span>
-  </div>
-  <div class="hint">Space play · N new shape · R new riff · 1–5 fractal · S full plane · P palette · H hide panel · F fullscreen. The panel fades when the mouse is still.</div>
+<header>
+  <h1 class="display">Acid Drift</h1>
+  <p id="phase" class="display">Press start</p>
+</header>
+<canvas id="scope"></canvas>
+<div class="controls">
+  <button id="go" class="display" aria-pressed="false">Start</button>
+  <label class="ctl">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+  <label class="ctl">Chaos <input id="chaos" type="range" min="0.2" max="4" step="0.05" value="1"></label>
+  <button id="riff">New riff on next bar</button>
 </div>
-<div id="toast"></div>
-<div id="nogl" hidden>This page needs WebGL2 with float render targets.</div>
+<div class="steps" id="steps"></div>
+<div class="drift" id="drift"></div>
+<p class="hint">Nothing here is a loop. A 303-style voice plays a generated 16-step riff that mutates every two bars; every parameter below wanders on its own slow timescale, and after 24 bars the floor drops out for a breakdown and a build of 8 to 16 bars before a fresh drop. Space toggles play.</p>
 
 <script>
 (() => {
@@ -782,11 +747,6 @@ function tick() {
   }
 }
 
-// ======================================================================================
-// Everything above this line is the Acid Drift audio engine, copied verbatim from index.html.
-// Everything below replaces its UI: a full-screen HDR fractal driven by the music's parameters.
-// ======================================================================================
-
 // ---------- transport
 const go = $('#go');
 async function toggle() {
@@ -804,626 +764,66 @@ async function toggle() {
 }
 go.addEventListener('click', toggle);
 $('#vol').addEventListener('input', e => { if (A.master) A.master.gain.setTargetAtTime(parseFloat(e.target.value), A.ctx.currentTime, 0.05); });
-$('#newriff').addEventListener('click', () => { S.pendingRiff = true; toast('New riff on the next bar'); });
+$('#riff').addEventListener('click', () => { S.pendingRiff = true; $('#riff').textContent = 'New riff queued'; setTimeout(() => $('#riff').textContent = 'New riff on next bar', 1500); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { e.preventDefault(); toggle(); } });
 
-// ---------- WebGL2 setup
-const cv = $('#gl');
-const gl = cv.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
-const extF = gl && gl.getExtension('EXT_color_buffer_float');
-if (!gl || !extF) { $('#nogl').hidden = false; $('#panel').hidden = true; return; }
-gl.getExtension('OES_texture_float_linear');
-
-function sh(src, type) {
-  const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o);
-  if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) { const m = gl.getShaderInfoLog(o); console.error(m, src); throw new Error(m); }
-  return o;
+// ---------- visuals
+const stepsEl = $('#steps'), stepCells = [];
+for (let i = 0; i < 16; i++) { const d = document.createElement('div'); stepsEl.appendChild(d); stepCells.push(d); }
+const driftEl = $('#drift'), rows = {};
+for (const k in P) {
+  const r = document.createElement('div'); r.className = 'row';
+  r.innerHTML = `<span class="n">${NAMES[k]}</span><span class="b"><i></i></span><span class="v"></span>`;
+  driftEl.appendChild(r); rows[k] = { bar: r.querySelector('i'), val: r.querySelector('.v') };
 }
-function prog(fs) {
-  const p = gl.createProgram(); gl.attachShader(p, sh(VS, gl.VERTEX_SHADER)); gl.attachShader(p, sh(fs, gl.FRAGMENT_SHADER));
-  gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-  p._u = {}; return p;
-}
-const U = (p, n) => (n in p._u) ? p._u[n] : (p._u[n] = gl.getUniformLocation(p, n));
-
-const VS = `#version 300 es
-layout(location=0) in vec2 pos; out vec2 uv;
-void main(){ uv = pos*0.5+0.5; gl_Position = vec4(pos,0.0,1.0); }`;
-
-const COMPLEX = `
-vec2 cm(vec2 a, vec2 b){ return vec2(a.x*b.x-a.y*b.y, a.x*b.y+a.y*b.x); }
-vec2 cdiv(vec2 a, vec2 b){ float d = max(dot(b,b), 1e-12); return vec2(a.x*b.x+a.y*b.y, a.y*b.x-a.x*b.y)/d; }
-vec2 cv(float t){ return vec2(cos(t), sin(t)); }`;
-
-// Density transport (the mobius-ifs idea): each pixel w pulls density from f_t(w) for every map t, weighted by the
-// area Jacobian, so the image converges to the invariant measure of the IFS { f_t^-1 }. The three colour channels
-// carry three densities with different per-map weights, and get mapped through a palette at display time.
-// The frame-to-frame normalisation (uScale) is folded into the sampling, so no extra pass is needed.
-const iterProg = prog(`#version 300 es
-precision highp float;
-in vec2 uv; out vec4 fragColor;
-uniform sampler2D uD;
-uniform vec2 uExt, uTexel;
-uniform int nT, uFamily;
-uniform float A[48];
-uniform vec3 CW[6];
-uniform vec3 uScale;
-uniform float uJmax;
-uniform int uFull, uChart;   // full plane: 1 = Riemann-sphere two-chart mode; chart 0 = inside disc, 1 = inverted outside disc
-uniform sampler2D uDo;       // old density, outside chart
-${COMPLEX}
-vec2 F(vec2 w, int t){
-  int o = t*8;
-  if (uFamily == 0) return cdiv(cm(cv(A[o]), w) + cv(A[o+1]), cm(cv(A[o+2]), w) + cv(A[o+3]));
-  if (uFamily == 1) {
-    vec2 n = cm(cm(cv(A[o]), w), w) + cm(cv(A[o+1]), w) + cv(A[o+2]);
-    vec2 d = cm(cv(A[o+3]), w) + cv(A[o+4]);
-    return cdiv(n, d);
+const cv = $('#scope'), c2 = cv.getContext('2d');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let fd, td, lastUI = 0;
+function resize() { const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1; cv.width = r.width * dpr; cv.height = r.height * dpr; }
+addEventListener('resize', resize); resize();
+function draw(ts) {
+  requestAnimationFrame(draw);
+  const W = cv.width, H = cv.height;
+  c2.fillStyle = reduce ? '#12061c' : 'rgba(18,6,28,0.32)'; c2.fillRect(0, 0, W, H);
+  if (!A.an) return;
+  const now = A.ctx.currentTime;
+  if (!fd) { fd = new Uint8Array(A.an.frequencyBinCount); td = new Uint8Array(A.an.fftSize); }
+  A.an.getByteFrequencyData(fd);
+  const nb = 96, bw = W / nb;
+  for (let i = 0; i < nb; i++) {
+    const idx = Math.floor(Math.pow(i / nb, 2) * 300), h = fd[idx] / 255 * H * 0.9;
+    c2.fillStyle = 'rgba(255,45,149,0.55)'; c2.fillRect(i * bw + 1, H - h, bw - 2, h);
   }
-  // flame: variation (spherical / swirl mix) followed by an expanding similarity
-  float r2 = dot(w,w) + 1e-5;
-  float m1 = 0.5 + 0.5*sin(A[o+4]);
-  vec2 v = mix(w, w/r2, m1);
-  float sw = 1.2*sin(A[o+5]);
-  v = cm(v, cv(sw*dot(v,v)));
-  float s = 1.7 + 0.7*sin(A[o+1]);
-  v = s*cm(v, cv(A[o]));
-  return v + 0.9*vec2(cos(A[o+2]), sin(A[o+3]));
-}
-vec3 sampleAt(vec2 w){
-  float e = uTexel.y*uExt.y*0.5;
-  vec3 acc = vec3(0.0), wt = vec3(0.0);
-  for (int t = 0; t < 6; t++) {
-    if (t >= nT) break;
-    vec2 z = F(w, t), zx = F(w + vec2(e, 0.0), t), zy = F(w + vec2(0.0, e), t);
-    vec2 dx = (zx - z)/e, dy = (zy - z)/e;
-    float J = min(abs(dx.x*dy.y - dx.y*dy.x), uJmax);
-    vec2 s = z/uExt + 0.5;
-    if (s.x > 0.0 && s.x < 1.0 && s.y > 0.0 && s.y < 1.0) acc += texture(uD, s).rgb * J * CW[t];
-    wt += CW[t];
-  }
-  return acc / max(wt, vec3(1e-6));
-}
-/* ---- Full plane (Riemann sphere), after mobius-ifs ----
-   A sphere point is carried as a homogeneous pair [Z0,Z1], z = Z1/Z0, so infinity (Z0 = 0) is representable.
-   The inside chart holds |z| <= Rd as is; the outside chart holds the inversion u = Rd^2 z/|z|^2 of |z| > Rd. */
-vec2 cconj(vec2 z){ return vec2(z.x, -z.y); }
-void evalFhom(vec2 W0, vec2 W1, int t, out vec2 Z0, out vec2 Z1){
-  float s = max(max(length(W0), length(W1)), 1e-30); W0 /= s; W1 /= s;   // projectively invariant: keeps every term bounded
-  int o = t*8;
-  if (uFamily == 0) { Z1 = cm(cv(A[o]), W1) + cm(cv(A[o+1]), W0); Z0 = cm(cv(A[o+2]), W1) + cm(cv(A[o+3]), W0); }
-  else {
-    Z1 = cm(cv(A[o]), cm(W1, W1)) + cm(cv(A[o+1]), cm(W1, W0)) + cm(cv(A[o+2]), cm(W0, W0));
-    Z0 = cm(cm(cv(A[o+3]), W1) + cm(cv(A[o+4]), W0), W0);
-  }
-}
-float chordH(vec2 A0, vec2 A1, vec2 B0, vec2 B1){   // chordal distance on the sphere between homogeneous points
-  vec2 cr = cm(A0, B1) - cm(A1, B0);
-  return length(cr)/max(sqrt(dot(A0,A0) + dot(A1,A1))*sqrt(dot(B0,B0) + dot(B1,B1)), 1e-30);
-}
-vec3 sampleSphere(vec2 Z0, vec2 Z1, float Rd2){   // old density at a sphere point, from whichever chart contains it
-  if (dot(Z1,Z1) <= Rd2*dot(Z0,Z0)) return texture(uD, cdiv(Z1, Z0)/uExt + 0.5).rgb;
-  vec2 uz = Rd2*cm(Z1, cconj(Z0))/max(dot(Z1,Z1), 1e-30);
-  return texture(uDo, uz/uExt + 0.5).rgb;
-}
-vec3 fullAt(vec2 loc){
-  float Rd = uExt.y*0.5, Rd2 = Rd*Rd;
-  vec2 locE = loc + vec2(uTexel.x*uExt.x, 0.0);   // finite-difference neighbour
-  vec2 P0, P1, Pe0, Pe1;
-  if (uChart == 0) { P0 = vec2(1.0, 0.0); P1 = loc; Pe0 = vec2(1.0, 0.0); Pe1 = locE; }
-  else { P0 = cconj(loc); P1 = vec2(Rd2, 0.0); Pe0 = cconj(locE); Pe1 = vec2(Rd2, 0.0); }   // actual point w = Rd2/conj(loc)
-  float din = chordH(P0, P1, Pe0, Pe1);
-  vec3 acc = vec3(0.0), wt = vec3(0.0);
-  for (int t = 0; t < 6; t++) {
-    if (t >= nT) break;
-    vec2 Z0, Z1, Ze0, Ze1;
-    evalFhom(P0, P1, t, Z0, Z1); evalFhom(Pe0, Pe1, t, Ze0, Ze1);
-    float sd = chordH(Z0, Z1, Ze0, Ze1)/max(din, 1e-9);   // spherical derivative
-    float J = min(sd*sd, 30.0);                          // round-sphere area Jacobian
-    acc += sampleSphere(Z0, Z1, Rd2)*J*CW[t];
-    wt += CW[t];
-  }
-  return acc/max(wt, vec3(1e-6));
-}
-void main(){
-  vec2 w = (uv - 0.5)*uExt, h = uTexel*uExt*0.25;
-  vec3 v;
-  if (uFull == 1) v = fullAt(w + vec2(-h.x, -h.y)) + fullAt(w + vec2(h.x, -h.y)) + fullAt(w + vec2(-h.x, h.y)) + fullAt(w + h);
-  else v = sampleAt(w + vec2(-h.x, -h.y)) + sampleAt(w + vec2(h.x, -h.y)) + sampleAt(w + vec2(-h.x, h.y)) + sampleAt(w + h);
-  v = clamp(v*0.25*uScale, vec3(0.001), vec3(100.0));
-  fragColor = vec4(v, 1.0);
-}`);
-
-// Escape-time families render a finished linear-light colour straight into the texture.
-const escProg = prog(`#version 300 es
-precision highp float;
-in vec2 uv; out vec4 fragColor;
-uniform vec2 uExt;
-uniform int uFamily;
-uniform float A[48];
-uniform vec3 uC0, uC1, uC2;
-uniform float uPump, uEnergy;
-${COMPLEX}
-vec3 pal3(float u){
-  vec3 w = pow(0.5 + 0.5*cos(6.2832*(vec3(u) + vec3(0.0, 0.333, 0.667))), vec3(3.0));
-  return (uC0*w.x + uC1*w.y + uC2*w.z)*1.1;
-}
-void main(){
-  vec2 p = (uv - 0.5)*uExt*0.5;
-  p = cm(p, cv(0.6*sin(A[2])));
-  p *= (0.8 + 0.3*sin(A[3]))*(1.0 - 0.06*uPump);
-  vec3 col = vec3(0.0);
-  if (uFamily == 3) {
-    vec2 c = vec2(0.62 + 0.36*sin(A[0]), 0.62 + 0.36*sin(A[1]));
-    vec2 z = p*1.4 + 0.25*vec2(sin(A[8]), cos(A[9]));
-    float w = 0.5;
-    for (int i = 0; i < 14; i++) {
-      z = abs(z)/dot(z,z) - c;
-      float d = abs(z.y) + 0.15*abs(z.x);
-      float k = exp(-10.0*d);
-      vec3 ci = (i%3==0) ? uC0 : (i%3==1) ? uC1 : uC2;
-      col += k*ci*w;
-      w *= 0.86;
+  let rms = [0, 0];
+  [[A.anL, '#2df5ff', 0], [A.anR, '#ffb3dc', 1]].forEach(([an, col, ch]) => {
+    an.getByteTimeDomainData(td);
+    c2.strokeStyle = col; c2.lineWidth = 2 * (devicePixelRatio || 1); c2.beginPath();
+    let e = 0;
+    for (let i = 0; i < td.length; i++) {
+      const s = (td[i] - 128) / 128; e += s * s;
+      const x = i / td.length * W, y = H / 2 + s * H * 0.45; i ? c2.lineTo(x, y) : c2.moveTo(x, y);
     }
-    col = col*col*2.2;
-    col *= 0.55 + 0.45*uEnergy;
-  } else {
-    float th = A[0], ep = 1.03 + 0.05*(0.5 + 0.5*sin(A[1]));
-    vec2 c = ep*(0.5*cv(th) - 0.25*cv(2.0*th));
-    vec2 z = p*1.25, trapP = 0.4*vec2(cos(A[5]), sin(A[6]));
-    float tr = 1e9, n = 0.0;
-    for (int i = 0; i < 110; i++) {
-      z = cm(z, z) + c;
-      tr = min(tr, length(z - trapP));
-      if (dot(z,z) > 4096.0) break;
-      n += 1.0;
-    }
-    float glow = exp(-tr*9.0);
-    if (n >= 110.0) col = uC0*0.08 + (uC1 + uC2)*glow*1.2;
-    else {
-      float sn = n - log2(max(0.5*log2(dot(z,z)), 1e-6));
-      float u = sn*0.045 + 0.1*sin(A[7]);
-      col = pal3(u)*(0.02 + 0.98*smoothstep(0.0, 0.7, sn*0.05)) + (uC1 + uC2)*glow*0.6;
-    }
-    col *= 0.6 + 0.4*uEnergy;
+    c2.stroke(); rms[ch] = Math.sqrt(e / td.length);
+  });
+  // balance: a bar that slides towards the louder side
+  const bal = (rms[1] - rms[0]) / (rms[0] + rms[1] + 1e-6), bh = 6 * (devicePixelRatio || 1);
+  c2.fillStyle = 'rgba(169,139,192,0.35)'; c2.fillRect(W * 0.3, bh, W * 0.4, bh);
+  c2.fillStyle = '#e8ff3a'; c2.fillRect(W * 0.5 + bal * W * 0.2 - bh, 0, bh * 2, bh * 3);
+  while (S.flashQ.length && S.flashQ[0] <= now) { S.flashQ.shift(); S.flash = 1; }
+  if (S.flash > 0.02 && !reduce) {
+    c2.strokeStyle = `rgba(232,255,58,${S.flash})`; c2.lineWidth = 10 * S.flash * (devicePixelRatio || 1);
+    c2.strokeRect(0, 0, W, H); S.flash *= 0.8;
   }
-  fragColor = vec4(max(col, vec3(0.0)), 1.0);
-}`);
-
-// 32x32 statistics: each output cell averages 16 point samples; JS derives the mean and a soft max from it.
-const statsProg = prog(`#version 300 es
-precision highp float;
-in vec2 uv; out vec4 fragColor;
-uniform sampler2D uD;
-uniform int uMax;
-void main(){
-  vec2 cell = vec2(1.0/32.0), o = floor(uv*32.0)*cell;
-  vec3 s = vec3(0.0), m = vec3(0.0);
-  for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { vec3 v = texture(uD, o + cell*(vec2(float(i), float(j)) + 0.5)/4.0).rgb; s += v; m = max(m, v); }
-  fragColor = vec4(uMax == 1 ? m : s/16.0, 1.0);
-}`);
-
-// Display: log tone map + palette for densities, highlight-weighted HDR gain, kick pump, then either sRGB for an SDR
-// canvas or a log encoding (decoded by the WebGPU pass) so 8-bit copy keeps the range up to HMAX x SDR white.
-const HMAX = 12.0, HK = 48.0;
-const dispProg = prog(`#version 300 es
-precision highp float;
-in vec2 uv; out vec4 fragColor;
-uniform sampler2D uD, uDo;
-uniform int uMode, uHdr, uFull;
-uniform vec2 uExt;
-uniform vec3 uLM, uLo;
-uniform float uG, uH, uPump, uFlash, uExpo;
-uniform mat3 uPal;
-vec3 lin2srgb(vec3 c){ return mix(1.055*pow(c, vec3(1.0/2.4)) - 0.055, c*12.92, lessThanEqual(c, vec3(0.0031308))); }
-void main(){
-  vec2 c = uv - 0.5;
-  vec2 suv = 0.5 + c*(1.0 - 0.05*uPump);
-  vec3 d;
-  if (uFull == 1) {                          // disc in the middle from the inside chart, the rest from the inverted outside chart
-    vec2 w = (suv - 0.5)*uExt; float r2 = dot(w, w), Rd2 = uExt.y*uExt.y*0.25;
-    d = r2 <= Rd2 ? texture(uD, suv).rgb : texture(uDo, (Rd2*w/r2)/uExt + 0.5).rgb;
-  } else d = texture(uD, suv).rgb;
-  vec3 col;
-  if (uMode == 0) { vec3 n = pow(clamp((log(1.0 + d) - uLo)/max(uLM - uLo, vec3(0.05)), 0.0, 1.0), vec3(uG)); col = uPal*n; }
-  else col = d;
-  col *= uExpo*(1.0 - 0.35*dot(c, c));
-  float m = max(col.r, max(col.g, col.b));
-  float gain = 1.0 + (uH - 1.0)*smoothstep(0.35, 1.6, m);
-  col *= gain*(1.0 + 0.45*uPump + 0.7*uFlash);
-  if (uHdr == 1) fragColor = vec4(log2(1.0 + clamp(col, 0.0, ${HMAX.toFixed(1)})*${HK.toFixed(1)})/log2(1.0 + ${(HMAX*HK).toFixed(1)}), 1.0);
-  else fragColor = vec4(lin2srgb(clamp(1.0 - exp(-1.25*col), 0.0, 1.0)), 1.0);
-}`);
-
-const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-const drawQuad = () => gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-function makeTex(w, h, ifmt) {
-  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, ifmt, w, h);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return t;
-}
-function makeFBO(t) { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return f; }
-
-const statsTex = makeTex(32, 32, gl.RGBA32F), statsFBO = makeFBO(statsTex), statsBuf = new Float32Array(32 * 32 * 4);
-
-// ---------- visual state
-const V = { family: 0, palette: 3, nT: 2, drift: 0.22, riff: 0, spec: 1, color: 0.42, pulse: 0, speed: 0, quality: 1200, full: true,
-            SW: 0, SH: 0, tex: [null, null], fbo: [null, null], texO: [null, null], fboO: [null, null], pp: 0,
-            scale: [1, 1, 1], lam: [1, 1, 1], prevAvg: [0, 0, 0], logMax: [1, 1, 1], logLo: [0, 0, 0],
-            base: new Float32Array(48), rate: new Float32Array(48), spin: new Float32Array(48), ang: new Float32Array(48), tgt: new Float32Array(48),
-            cw: new Float32Array(18), pal: new Float32Array(9), hue: 0 };
-function randomizeShape() {
-  for (let i = 0; i < 48; i++) { V.base[i] = Math.random() * 6.2832; V.rate[i] = (Math.random() - 0.5) * 0.5; V.spin[i] = 0; }
-}
-randomizeShape();
-for (let i = 0; i < 48; i++) V.ang[i] = V.tgt[i] = V.base[i];
-
-function allocDensity() {
-  const aspect = cv.width / Math.max(1, cv.height);
-  V.SH = V.quality; V.SW = Math.min(2400, Math.max(64, Math.round(V.SH * aspect)));
-  for (let i = 0; i < 2; i++) {
-    if (V.tex[i]) { gl.deleteTexture(V.tex[i]); gl.deleteFramebuffer(V.fbo[i]); gl.deleteTexture(V.texO[i]); gl.deleteFramebuffer(V.fboO[i]); }
-    V.tex[i] = makeTex(V.SW, V.SH, gl.RGBA16F); V.fbo[i] = makeFBO(V.tex[i]);
-    V.texO[i] = makeTex(V.SW, V.SH, gl.RGBA16F); V.fboO[i] = makeFBO(V.texO[i]);   // outside chart for full-plane mode
-  }
-  resetDensity();
-}
-function resetDensity() {
-  gl.clearColor(1, 1, 1, 1);
-  for (const f of [...V.fbo, ...V.fboO]) { gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.clear(gl.COLOR_BUFFER_BIT); }
-  V.scale = [1, 1, 1]; V.lam = [1, 1, 1]; V.prevAvg = [0, 0, 0]; V.logMax = [1, 1, 1]; V.logLo = [0, 0, 0];
-}
-
-let resizeTimer = null;
-function fitCanvas() {
-  const dpr = Math.min(2, devicePixelRatio || 1), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
-  if (cv.width !== w || cv.height !== h) {
-    cv.width = w; cv.height = h;
-    clearTimeout(resizeTimer); resizeTimer = setTimeout(allocDensity, 150);
-    if (!V.tex[0]) allocDensity();
-  }
-}
-fitCanvas();
-addEventListener('resize', fitCanvas);
-
-// ---------- what the music is doing right now, read from the engine without touching it
-const KEYS = Object.keys(P);
-const M = { u: new Float32Array(20), phase: 'full', prevPhase: 'full', frac: 0, energy: 1, pump: 0, flash: 0, hit: 0, cur: -1, curAcc: false,
-            stepT: 0, bar: 0, bands: new Float32Array(4), mb: new Float32Array(6), note: new Float32Array(6), rms: 0, bpm: 132, root: 33, fd: null, td: null, dropped: 0 };
-function updateMusic(dt) {
-  for (let i = 0; i < KEYS.length; i++) M.u[i] = P[KEYS[i]].u;
-  M.bpm = P.tempo.v; M.phase = S.phase; M.frac = S.frac || 0; M.root = S.root;
-  const E = M.phase === 'full' ? 1 : M.phase === 'breakdown' ? 0.3 : 0.3 + 0.7 * M.frac;
-  M.energy += (E - M.energy) * Math.min(1, dt * 2.5);
-  if (M.prevPhase === 'build' && M.phase === 'full') { M.dropped = 1; onDrop(); }
-  M.prevPhase = M.phase;
-  M.flash *= Math.exp(-dt * 7); M.hit *= Math.exp(-dt * 11); M.dropped *= Math.exp(-dt * 1.5);
-  // each map owns a contiguous run of the 16-step pattern; its mean note is that map's riff level
-  for (let t = 0; t < 6; t++) {
-    if (!S.pat || t >= V.nT) { M.note[t] = 0.5; continue; }
-    const s0 = Math.floor(t * 16 / V.nT), s1 = Math.floor((t + 1) * 16 / V.nT); let sum = 0;
-    for (let i = s0; i < s1; i++) { const st = S.pat[i]; sum += st.gate ? (st.note + 12 * st.oct) / 24 : 0; }
-    M.note[t] = sum / Math.max(1, s1 - s0);
-  }
-  if (!A.ctx || !S.on) { M.pump *= Math.exp(-dt * 6); for (let b = 0; b < 4; b++) M.bands[b] *= Math.exp(-dt * 6); for (let b = 0; b < 6; b++) M.mb[b] *= Math.exp(-dt * 6); M.rms *= Math.exp(-dt * 6); return; }
-  const t = A.ctx.currentTime;
-  while (S.flashQ.length && S.flashQ[0] <= t) { S.flashQ.shift(); M.flash = 1; }
-  while (S.q.length && S.q[0].t <= t) {
-    const q = S.q.shift(); if (q.step === 0) M.bar++;
-    M.cur = q.step; M.stepT = q.t; M.hit = 1; M.curAcc = !!(S.pat && S.pat[q.step].acc && S.pat[q.step].gate);
-  }
-  const dg = A.duck.gain.value, pumpNow = Math.min(1, Math.max(0, (1 - dg) / 0.78));
-  M.pump = Math.max(pumpNow, M.pump * Math.exp(-dt * 6), M.flash * 0.8);
-  if (!M.fd) { M.fd = new Uint8Array(A.an.frequencyBinCount); M.td = new Uint8Array(A.an.fftSize); }
-  A.an.getByteFrequencyData(M.fd);
-  const hzPerBin = A.ctx.sampleRate / A.an.fftSize, edges = [40, 160, 500, 2500, 10000];
-  for (let b = 0; b < 4; b++) {
-    let s = 0, n = 0; for (let i = Math.floor(edges[b] / hzPerBin); i < Math.min(M.fd.length, edges[b + 1] / hzPerBin); i++) { s += M.fd[i]; n++; }
-    const v = n ? Math.min(1, Math.pow(s / n / 255, 1.5) * 1.4) : 0;
-    M.bands[b] = v > M.bands[b] ? M.bands[b] + (v - M.bands[b]) * Math.min(1, dt * 40) : M.bands[b] + (v - M.bands[b]) * Math.min(1, dt * 8);
-  }
-  // per-map bands: the spectrum from 40 Hz to 12 kHz split into as many log-spaced bands as there are maps; map t owns band t
-  for (let t = 0; t < V.nT; t++) {
-    const lo = 40 * Math.pow(300, t / V.nT), hi = 40 * Math.pow(300, (t + 1) / V.nT);
-    let s = 0, n = 0; for (let i = Math.floor(lo / hzPerBin); i < Math.min(M.fd.length, hi / hzPerBin); i++) { s += M.fd[i]; n++; }
-    const v = n ? Math.min(1, Math.pow(s / n / 255, 1.5) * 1.5) : 0;
-    M.mb[t] = v > M.mb[t] ? M.mb[t] + (v - M.mb[t]) * Math.min(1, dt * 40) : M.mb[t] + (v - M.mb[t]) * Math.min(1, dt * 8);
-  }
-  A.an.getByteTimeDomainData(M.td); let e = 0;
-  for (let i = 0; i < M.td.length; i += 4) { const s = (M.td[i] - 128) / 128; e += s * s; }
-  M.rms += (Math.sqrt(e / (M.td.length / 4)) * 2.5 - M.rms) * Math.min(1, dt * 10);
-}
-function onDrop() { randomizeShape(); toast(pick(['drop', 'again', 'new shape', 'from the top']), 900); }
-
-// ---------- drives: music parameters -> map coefficients (48 angles: 6 maps x 8 slots) and colour weights
-const perm = [7, 13, 2, 18, 5, 11, 0, 16, 9, 3, 14, 19, 6, 1, 12, 8, 17, 4, 15, 10];
-function updateDrive(dt) {
-  const nT = V.nT, ph = M.phase, fast = V.family < 3 ? 0.45 : 1;   // density images need ~30 frames to settle, so fast sources are damped for them
-  const spd = V.speed * (ph === 'breakdown' ? 0.4 : ph === 'build' ? 1 + 1.5 * M.frac : 1) * (0.6 + 0.4 * M.energy);
-  const tcur = M.cur >= 0 ? Math.floor(M.cur * nT / 16) : -1;
-  const N = nT * 8, hitAmt = M.hit * V.pulse * (M.curAcc ? 1.6 : 1);
-  for (let i = 0; i < N; i++) {
-    const t = Math.floor(i / 8), j = i % 8;
-    V.spin[i] += V.rate[i] * spd * dt * 0.15;
-    let a = V.base[i] + V.spin[i];
-    // drift: the slowly wandering synth parameters, one per slot
-    a += V.drift * Math.PI * (2 * M.u[perm[i % 20]] - 1);
-    // riff: the 16-step pattern spread over the slots; the map owning the playing step gets nudged
-    const st = S.pat ? S.pat[Math.floor(i * 16 / N)] : null;
-    a += V.riff * Math.PI * 1.2 * (st ? (st.gate ? (st.note + 12 * st.oct) / 24 : -0.25) : 0);
-    if (t === tcur && j === 0) a += V.riff * 0.7 * fast * hitAmt;
-    // spectrum: map t follows its own band (low maps = low end, high maps = top end); slots move in alternating directions
-    a += V.spec * Math.PI * fast * (1.6 * M.mb[t] - 0.4) * (j % 2 ? -0.7 : 1);
-    V.tgt[i] = a;
-  }
-  const quick = Math.min(1, V.riff + V.spec);
-  const tau = Math.max(V.family < 3 ? 0.12 : 0.06, 0.5 - 0.45 * quick);
-  const k = 1 - Math.exp(-dt / tau);
-  for (let i = 0; i < N; i++) V.ang[i] += (V.tgt[i] - V.ang[i]) * k;
-  // colour weights: the amount each map favours one density channel; resonance (or bass, via spectrum) sets the separation
-  const D = Math.min(1, V.drift + V.riff + V.spec);
-  const sepSrc = P.res.u * (1 - V.spec) + M.bands[0] * V.spec;
-  const cw = 1.9 + 3.5 * (0.25 + 0.75 * D) * sepSrc;
-  const pat = [[cw, 1, 1], [1, cw, 1], [1, 1, cw], [cw, cw, 1], [cw, 1, cw], [1, cw, cw]];
-  for (let t = 0; t < 6; t++) {
-    let g = 1 + V.spec * (1.2 * M.mb[t] - 0.5);
-    if (t === tcur) g *= 1 + 1.8 * V.riff * hitAmt;
-    for (let c = 0; c < 3; c++) V.cw[t * 3 + c] = pat[t][c] * g;
-  }
-}
-
-// ---------- palettes (linear light); the whole triad hue-rotates with the key, the cutoff, or the spectrum
-const PALS = [
-  [[1.0, 0.04, 0.5], [0.04, 0.85, 1.0], [0.85, 1.0, 0.08]],
-  [[0.9, 0.06, 0.02], [1.0, 0.42, 0.04], [1.0, 0.85, 0.4]],
-  [[0.02, 0.08, 0.85], [0.0, 0.7, 0.62], [0.65, 0.95, 1.0]],
-  null,
-  [[0.55, 0.0, 1.0], [0.0, 1.0, 0.35], [1.0, 0.15, 0.08]],
-  [[0.85, 0.85, 1.0], [1.0, 1.0, 1.0], [0.65, 0.7, 0.9]],
-];
-function hsv(h, s, v) {
-  const f = n => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
-  return [f(5), f(3), f(1)];
-}
-function hueRotate(c, h) {                       // rotate in YIQ so brightness is kept
-  const a = h * 6.2832, cs = Math.cos(a), sn = Math.sin(a);
-  const y = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2], i = 0.596 * c[0] - 0.274 * c[1] - 0.322 * c[2], q = 0.211 * c[0] - 0.523 * c[1] + 0.312 * c[2];
-  const i2 = i * cs - q * sn, q2 = i * sn + q * cs;
-  return [Math.max(0, y + 0.956 * i2 + 0.621 * q2), Math.max(0, y - 0.272 * i2 - 0.647 * q2), Math.max(0, y - 1.106 * i2 + 1.703 * q2)];
-}
-function updatePalette(now, dt) {
-  let cols, hue;
-  if (V.palette === 3) {
-    hue = (M.root - 33) / 12 + M.bar * 0.013 + now * 0.004;
-    cols = [hsv(hue, 0.95, 1), hsv(hue + 0.333, 0.9, 1), hsv(hue + 0.667, 0.85, 1)];
-  } else {
-    const target = (P.cutoff.u - 0.5) * 0.18 + V.spec * 0.1 * M.bands[3];
-    V.hue += (target - V.hue) * Math.min(1, dt * 2);
-    cols = PALS[V.palette].map(c => hueRotate(c, V.hue));
-  }
-  // colour drive: channel c is map c's colour (maps beyond three share channels); its hue and brightness follow the same
-  // sources as that map's shape: its own drift parameter, its riff segment's mean note, and its own spectrum band
-  if (V.color > 0) for (let c = 0; c < 3; c++) {
-    const u = M.u[perm[(c * 8 + 4) % 20]];
-    const shift = V.drift * (u - 0.5) * 0.6 + V.riff * (M.note[c] - 0.5) * 0.6 + V.spec * (M.mb[c] - 0.5) * 0.4;
-    const bright = 1 + V.color * (V.spec * (1.4 * M.mb[c] - 0.6) + V.riff * 0.5 * (M.note[c] - 0.4));
-    cols[c] = hueRotate(cols[c], V.color * shift).map(x => x * Math.max(0.15, bright));
-  }
-  for (let c = 0; c < 3; c++) for (let k = 0; k < 3; k++) V.pal[c * 3 + k] = cols[c][k];
-}
-
-// ---------- HDR presentation (from mobius-ifs): WebGL keeps drawing into #gl; when an HDR display and WebGPU are
-// available, a WebGPU pass copies that canvas, decodes the log encoding and presents on an rgba16float canvas with
-// extended tone mapping, so the fractal's cores go brighter than SDR white.
-const hdr = { active: false, ready: false, device: null, ctx: null, canvas: null, pipeline: null, sampler: null, uni: null, bind: null, copyTex: null, copyW: 0, copyH: 0 };
-const HDR_WGSL = `
-struct Params { hmax: f32, k: f32, pad0: f32, pad1: f32 };
-@group(0) @binding(0) var samp: sampler;
-@group(0) @binding(1) var tex: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> params: Params;
-struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var p = array<vec2f, 3>(vec2f(-1.0, -3.0), vec2f(3.0, 1.0), vec2f(-1.0, 1.0));
-  var o: VSOut; o.pos = vec4f(p[i], 0.0, 1.0); o.uv = p[i]*vec2f(0.5, -0.5) + 0.5; return o;
-}
-fn lin2srgb(c: vec3f) -> vec3f { return select(1.055*pow(c, vec3f(1.0/2.4)) - 0.055, c*12.92, c <= vec3f(0.0031308)); }
-@fragment fn fs(in: VSOut) -> @location(0) vec4f {
-  let e = textureSample(tex, samp, in.uv).rgb;
-  let L = (exp2(e*log2(1.0 + params.hmax*params.k)) - 1.0)/params.k;
-  return vec4f(lin2srgb(L), 1.0);
-}`;
-async function initHDR() {
-  if (!navigator.gpu) return false;
-  let device;
-  try { const ad = await navigator.gpu.requestAdapter(); if (!ad) return false; device = await ad.requestDevice(); } catch (e) { return false; }
-  const gc = document.createElement('canvas'); gc.className = 'hdr';
-  const ctx = gc.getContext('webgpu'); if (!ctx) return false;
-  try { ctx.configure({ device, format: 'rgba16float', alphaMode: 'opaque', toneMapping: { mode: 'extended' } }); } catch (e) { return false; }
-  const cfg = ctx.getConfiguration && ctx.getConfiguration();
-  if (!cfg || !cfg.toneMapping || cfg.toneMapping.mode !== 'extended') return false;
-  const mod = device.createShaderModule({ code: HDR_WGSL });
-  hdr.pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module: mod, entryPoint: 'vs' },
-    fragment: { module: mod, entryPoint: 'fs', targets: [{ format: 'rgba16float' }] }, primitive: { topology: 'triangle-list' } });
-  hdr.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-  hdr.uni = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  device.queue.writeBuffer(hdr.uni, 0, new Float32Array([HMAX, HK, 0, 0]));
-  gc.style.display = 'none'; cv.insertAdjacentElement('afterend', gc);
-  hdr.device = device; hdr.ctx = ctx; hdr.canvas = gc; hdr.ready = true;
-  return true;
-}
-function setHDR(on) {
-  hdr.active = on && hdr.ready;
-  cv.style.visibility = hdr.active ? 'hidden' : '';
-  if (hdr.canvas) hdr.canvas.style.display = hdr.active ? '' : 'none';
-  $('#boost').disabled = !hdr.active;
-}
-function hdrPresent() {
-  const d = hdr.device, w = cv.width, h = cv.height, gc = hdr.canvas;
-  if (gc.width !== w || gc.height !== h) { gc.width = w; gc.height = h; }
-  if (hdr.copyW !== w || hdr.copyH !== h) {
-    if (hdr.copyTex) hdr.copyTex.destroy();
-    hdr.copyTex = d.createTexture({ size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT });
-    hdr.bind = d.createBindGroup({ layout: hdr.pipeline.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: hdr.sampler }, { binding: 1, resource: hdr.copyTex.createView() }, { binding: 2, resource: { buffer: hdr.uni } }] });
-    hdr.copyW = w; hdr.copyH = h;
-  }
-  d.queue.copyExternalImageToTexture({ source: cv }, { texture: hdr.copyTex }, [w, h]);
-  const enc = d.createCommandEncoder();
-  const rp = enc.beginRenderPass({ colorAttachments: [{ view: hdr.ctx.getCurrentTexture().createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 1 }, storeOp: 'store' }] });
-  rp.setPipeline(hdr.pipeline); rp.setBindGroup(0, hdr.bind); rp.draw(3); rp.end();
-  d.queue.submit([enc.finish()]);
-}
-initHDR().then(ok => {
-  if (!ok) return;
-  $('#hdrrow').hidden = false;
-  const on = matchMedia('(dynamic-range: high)').matches;
-  $('#hdr').checked = on; setHDR(on);
-});
-$('#hdr').addEventListener('change', e => setHDR(e.target.checked));
-
-// ---------- rendering
-const fullOn = () => V.full && V.family < 2;
-function iterateDensity() {
-  const full = fullOn(), rd = V.tex[V.pp], wf = V.fbo[1 - V.pp];
-  gl.bindFramebuffer(gl.FRAMEBUFFER, wf); gl.viewport(0, 0, V.SW, V.SH);
-  gl.useProgram(iterProg);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, rd);
-  gl.uniform1i(U(iterProg, 'uD'), 0);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V.texO[V.pp]);
-  gl.uniform1i(U(iterProg, 'uDo'), 1);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.uniform1i(U(iterProg, 'uFull'), full ? 1 : 0); gl.uniform1i(U(iterProg, 'uChart'), 0);
-  gl.uniform2f(U(iterProg, 'uExt'), 4 * V.SW / V.SH, 4);
-  gl.uniform2f(U(iterProg, 'uTexel'), 1 / V.SW, 1 / V.SH);
-  gl.uniform1i(U(iterProg, 'nT'), V.nT); gl.uniform1i(U(iterProg, 'uFamily'), V.family);
-  gl.uniform1fv(U(iterProg, 'A'), V.ang); gl.uniform3fv(U(iterProg, 'CW'), V.cw);
-  gl.uniform3fv(U(iterProg, 'uScale'), V.scale); gl.uniform1f(U(iterProg, 'uJmax'), V.family === 2 ? 20 : 12);
-  drawQuad();
-  if (full) {                                   // second hemisphere: the inverted outside disc, from the same old textures
-    gl.bindFramebuffer(gl.FRAMEBUFFER, V.fboO[1 - V.pp]);
-    gl.uniform1i(U(iterProg, 'uChart'), 1);
-    drawQuad();
-  }
-  V.pp = 1 - V.pp;
-  // statistics of what was just written: keeps the total mass near 0.5 per channel and tracks the peak for tone mapping
-  gl.bindFramebuffer(gl.FRAMEBUFFER, statsFBO); gl.viewport(0, 0, 32, 32);
-  gl.useProgram(statsProg); gl.bindTexture(gl.TEXTURE_2D, V.tex[V.pp]); gl.uniform1i(U(statsProg, 'uD'), 0);
-  gl.uniform1i(U(statsProg, 'uMax'), 0); drawQuad();
-  gl.readPixels(0, 0, 32, 32, gl.RGBA, gl.FLOAT, statsBuf);
-  const avg = [0, 0, 0], mx = [0, 0, 0];
-  for (let i = 0; i < 1024; i++) for (let c = 0; c < 3; c++) avg[c] += statsBuf[i * 4 + c];
-  gl.uniform1i(U(statsProg, 'uMax'), 1); drawQuad();
-  gl.readPixels(0, 0, 32, 32, gl.RGBA, gl.FLOAT, statsBuf);
-  for (let i = 0; i < 1024; i++) for (let c = 0; c < 3; c++) { const v = statsBuf[i * 4 + c]; if (v > mx[c]) mx[c] = v; }
-  let bad = false;
-  for (let c = 0; c < 3; c++) { avg[c] /= 1024; if (!isFinite(avg[c]) || avg[c] < 1e-4) bad = true; }
-  if (bad) { resetDensity(); return; }
-  for (let c = 0; c < 3; c++) {
-    if (V.prevAvg[c] > 0) { const lam = avg[c] / (V.scale[c] * V.prevAvg[c]); if (isFinite(lam) && lam > 0) V.lam[c] = V.lam[c] * 0.6 + lam * 0.4; }
-    V.prevAvg[c] = avg[c];
-    V.scale[c] = Math.min(1e4, Math.max(1e-4, (1 / V.lam[c]) * Math.pow(0.5 / avg[c], 0.2)));
-    V.logMax[c] = Math.max(0.05, V.logMax[c] * 0.85 + Math.log(1 + mx[c]) * 0.15);
-    V.logLo[c] = V.logLo[c] * 0.85 + Math.log(1 + 0.7 * avg[c]) * 0.15;
-  }
-}
-function renderEscape() {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, V.fbo[1 - V.pp]); gl.viewport(0, 0, V.SW, V.SH);
-  gl.useProgram(escProg);
-  gl.uniform2f(U(escProg, 'uExt'), 4 * V.SW / V.SH, 4);
-  gl.uniform1i(U(escProg, 'uFamily'), V.family);
-  gl.uniform1fv(U(escProg, 'A'), V.ang);
-  gl.uniform3f(U(escProg, 'uC0'), V.pal[0], V.pal[1], V.pal[2]);
-  gl.uniform3f(U(escProg, 'uC1'), V.pal[3], V.pal[4], V.pal[5]);
-  gl.uniform3f(U(escProg, 'uC2'), V.pal[6], V.pal[7], V.pal[8]);
-  gl.uniform1f(U(escProg, 'uPump'), M.pump * V.pulse); gl.uniform1f(U(escProg, 'uEnergy'), M.energy);
-  drawQuad();
-  V.pp = 1 - V.pp;
-}
-function display() {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cv.width, cv.height);
-  gl.useProgram(dispProg);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, V.tex[V.pp]);
-  gl.uniform1i(U(dispProg, 'uD'), 0);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, V.texO[V.pp]);
-  gl.uniform1i(U(dispProg, 'uDo'), 1);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.uniform1i(U(dispProg, 'uFull'), fullOn() ? 1 : 0);
-  gl.uniform2f(U(dispProg, 'uExt'), 4 * V.SW / V.SH, 4);
-  gl.uniform1i(U(dispProg, 'uMode'), V.family < 3 ? 0 : 1);
-  gl.uniform1i(U(dispProg, 'uHdr'), hdr.active ? 1 : 0);
-  gl.uniform3fv(U(dispProg, 'uLM'), V.logMax); gl.uniform3fv(U(dispProg, 'uLo'), V.logLo);
-  const ph = M.phase, g = ph === 'breakdown' ? 0.9 : ph === 'build' ? 0.85 - 0.25 * M.frac : 0.65;
-  gl.uniform1f(U(dispProg, 'uG'), g);
-  gl.uniform1f(U(dispProg, 'uH'), hdr.active ? parseFloat($('#boost').value) * (0.7 + 0.3 * M.energy) : 1);
-  gl.uniform1f(U(dispProg, 'uPump'), M.pump * V.pulse); gl.uniform1f(U(dispProg, 'uFlash'), Math.max(M.flash, M.dropped * 0.6) * V.pulse);
-  gl.uniform1f(U(dispProg, 'uExpo'), 0.55 + 0.45 * M.energy);
-  gl.uniformMatrix3fv(U(dispProg, 'uPal'), false, V.pal);
-  drawQuad();
-}
-
-let lastTs = 0, fpsS = 60, frameN = 0, lastUI = 0;
-function frame(ts, manual) {
-  if (!manual) requestAnimationFrame(frame);
-  const now = ts / 1000, dt = Math.min(0.1, lastTs ? now - lastTs : 1 / 60); lastTs = now;
-  fitCanvas();
-  updateMusic(dt); updateDrive(dt); updatePalette(now, dt);
-  if (V.family < 3) iterateDensity(); else renderEscape();
-  display();
-  if (hdr.active) hdrPresent();
-  frameN++; fpsS = fpsS * 0.95 + 0.05 / Math.max(1e-3, dt);
-  if (ts - lastUI > 200) {
+  while (S.q.length && S.q[0].t <= now) S.cur = S.q.shift().step;
+  if (S.pat) stepCells.forEach((d, i) => { const st = S.pat[i];
+    d.className = (st.gate ? (st.acc ? 'a' : 'g') : '') + (st.slide && st.gate ? ' s' : '') + (i === S.cur && S.on ? ' now' : ''); });
+  if (ts - lastUI > 120) {
     lastUI = ts;
-    $('#fps').textContent = fpsS.toFixed(0) + ' fps';
+    for (const k in P) { rows[k].bar.style.width = (P[k].u * 100).toFixed(1) + '%'; rows[k].val.textContent = P[k].fmt(P[k].v); }
     if (S.on && S.label) $('#phase').textContent = S.label;
   }
 }
-requestAnimationFrame(frame);
-
-// ---------- controls
-const FAM = ['Möbius IFS', 'Rational IFS', 'Flame IFS', 'Kali', 'Julia'],
-      PAL = ['Acid', 'Ember', 'Ocean', 'Spectral', 'Neon', 'Mono'];
-let toastTimer = null;
-function toast(msg, ms = 1400) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms); }
-function setFamily(f) { f = ((f % 5) + 5) % 5; V.family = f; $('#family').value = f; $('#fullrow').hidden = f >= 2; resetDensity(); toast(FAM[f]); }
-function setPalette(p) { p = ((p % 6) + 6) % 6; V.palette = p; $('#palette').value = p; toast(PAL[p]); }
-$('#family').addEventListener('change', e => setFamily(parseInt(e.target.value)));
-$('#palette').addEventListener('change', e => setPalette(parseInt(e.target.value)));
-$('#maps').addEventListener('change', e => { V.nT = parseInt(e.target.value); });
-$('#full').addEventListener('change', e => { V.full = e.target.checked; resetDensity(); toast(V.full ? 'Full plane' : 'Disc only'); });
-for (const [id, key] of [['#drift', 'drift'], ['#riff', 'riff'], ['#spectrum', 'spec'], ['#color', 'color'], ['#pulse', 'pulse']]) $(id).addEventListener('input', e => { V[key] = parseFloat(e.target.value); });
-$('#speed').addEventListener('input', e => { V.speed = parseFloat(e.target.value); });
-$('#quality').addEventListener('change', e => { V.quality = parseInt(e.target.value); allocDensity(); });
-$('#shape').addEventListener('click', () => { randomizeShape(); toast('New shape'); });
-document.addEventListener('keydown', e => {
-  const tag = e.target.tagName;
-  if (e.code === 'Space') { e.preventDefault(); toggle(); return; }
-  if (tag === 'INPUT' || tag === 'SELECT') return;
-  if (e.key === 'n' || e.key === 'N') { randomizeShape(); toast('New shape'); }
-  else if (e.key === 'r' || e.key === 'R') { S.pendingRiff = true; toast('New riff on the next bar'); }
-  else if (e.key === 'h' || e.key === 'H') { panelHidden = !panelHidden; if (panelHidden) showPanel(false); else poke(); }
-  else if (e.key === 's' || e.key === 'S') { if (V.family < 2) { V.full = !V.full; $('#full').checked = V.full; resetDensity(); toast(V.full ? 'Full plane' : 'Disc only'); } }
-  else if (e.key === 'f' || e.key === 'F') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
-  else if (e.key === 'p') setPalette(V.palette + 1); else if (e.key === 'P') setPalette(V.palette - 1);
-  else if (e.key >= '1' && e.key <= '5') setFamily(parseInt(e.key) - 1);
-});
-
-// the panel fades when the mouse is still, and comes back on movement; H toggles it outright
-const panel = $('#panel');
-let panelHidden = false, hideTimer = null, panelHover = false;
-function showPanel(on) { panel.classList.toggle('hide', !on); }
-function poke() {
-  if (panelHidden) return;
-  showPanel(true); clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { if (!panelHover && !panel.contains(document.activeElement)) showPanel(false); }, 2800);
-}
-panel.addEventListener('mouseenter', () => panelHover = true);
-panel.addEventListener('mouseleave', () => { panelHover = false; poke(); });
-addEventListener('mousemove', poke); addEventListener('touchstart', poke, { passive: true });
-poke();
+requestAnimationFrame(draw);
 })();
 </script>
 </body>
