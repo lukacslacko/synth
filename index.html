@@ -9,15 +9,23 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#000;color:var(--paper);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;overflow:hidden}
 canvas#gl,canvas.hdr{position:fixed;inset:0;width:100vw;height:100vh;display:block}
-#panel{position:fixed;top:14px;left:14px;z-index:10;width:300px;padding:12px 14px 10px;border-radius:10px;
+#panel{position:fixed;top:14px;left:14px;z-index:10;width:max-content;max-width:min(300px,calc(100vw - 28px));padding:10px;border-radius:10px;
   background:rgba(8,4,13,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);
   transition:opacity .35s;display:flex;flex-direction:column;gap:10px}
+#panel.open{width:300px;padding:12px 14px 10px}
 #panel.hide{opacity:0;pointer-events:none}
-.top{display:flex;gap:12px;align-items:center}
+html.idle,html.idle *{cursor:none!important}
+.top{display:flex;gap:10px;align-items:center}
+#more{font:600 13px/1 system-ui,sans-serif;padding:11px 12px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.06);color:var(--paper);border:1px solid rgba(255,255,255,.14)}
+#more:hover{background:rgba(255,255,255,.14)}
+#more::after{content:" ▾";color:var(--mute)}
+#panel.open #more::after{content:" ▴"}
+#details{display:none;flex-direction:column;gap:10px}
+#panel.open #details{display:flex}
+.ttl{min-width:0}
 #go{font:700 15px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;padding:12px 16px;border:0;border-radius:6px;cursor:pointer;
   background:var(--magenta);color:var(--ink);min-width:78px}
 #go.on{background:var(--acid)}
-.ttl{min-width:0}
 .name{font-weight:700;letter-spacing:.04em;color:var(--acid);font-size:13px}
 .name span{color:var(--mute);font-weight:400;margin-left:4px}
 #phase{color:var(--mute);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -47,10 +55,12 @@ button.sm:hover{background:rgba(255,255,255,.14)}
 <div id="panel">
   <div class="top">
     <button id="go" aria-pressed="false">Play</button>
-    <div class="ttl">
-      <div class="name">ACID DRIFT<span>fractal</span></div>
-      <div id="phase">Space to start the music</div>
-    </div>
+    <button id="more" aria-expanded="false" aria-controls="details">Details</button>
+  </div>
+  <div id="details">
+  <div class="ttl">
+    <div class="name">ACID DRIFT<span>fractal</span></div>
+    <div id="phase">Space to start the music</div>
   </div>
   <div class="grid">
     <label><span>Fractal</span><select id="family">
@@ -69,7 +79,7 @@ button.sm:hover{background:rgba(255,255,255,.14)}
       <option value="5">Mono</option>
     </select></label>
     <label><span>Maps</span><select id="maps">
-      <option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
+      <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option>
       <option value="5">5</option><option value="6">6</option>
     </select></label>
     <label id="fullrow"><span>Plane</span><span class="hdrrow"><input type="checkbox" id="full" checked><span>Full plane (Riemann sphere)</span></span></label>
@@ -92,7 +102,8 @@ button.sm:hover{background:rgba(255,255,255,.14)}
     <button id="newriff" class="sm">New riff</button>
     <span id="fps"></span>
   </div>
-  <div class="hint">Space play · N new shape · R new riff · 1–5 fractal · S full plane · P palette · H hide panel · F fullscreen. The panel fades when the mouse is still.</div>
+  <div class="hint">Space play · D details · N new shape · R new riff · 1–5 fractal · S full plane · P palette · H hide panel · F fullscreen. While playing, the panel and the pointer hide when the mouse is still; move it or tap to bring them back.</div>
+  </div>
 </div>
 <div id="toast"></div>
 <div id="nogl" hidden>This page needs WebGL2 with float render targets.</div>
@@ -795,12 +806,14 @@ async function toggle() {
     S.on = false; clearInterval(S.timer); await A.ctx.suspend();
     go.textContent = 'Resume'; go.classList.remove('on'); go.setAttribute('aria-pressed', 'false');
     $('#phase').textContent = 'Paused';
+    poke();
     return;
   }
   await A.ctx.resume();
   S.on = true; S.lastT = A.ctx.currentTime; S.next = A.ctx.currentTime + 0.05;
   S.timer = setInterval(tick, 25);
   go.textContent = 'Stop'; go.classList.add('on'); go.setAttribute('aria-pressed', 'true');
+  poke();
 }
 go.addEventListener('click', toggle);
 $('#vol').addEventListener('input', e => { if (A.master) A.master.gain.setTargetAtTime(parseFloat(e.target.value), A.ctx.currentTime, 0.05); });
@@ -1051,7 +1064,7 @@ function makeFBO(t) { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FR
 const statsTex = makeTex(32, 32, gl.RGBA32F), statsFBO = makeFBO(statsTex), statsBuf = new Float32Array(32 * 32 * 4);
 
 // ---------- visual state
-const V = { family: 0, palette: 3, nT: 2, drift: 0.22, riff: 0, spec: 1, color: 0.42, pulse: 0, speed: 0, quality: 1200, full: true,
+const V = { family: 0, palette: 3, nT: 3, drift: 0.22, riff: 0, spec: 1, color: 0.42, pulse: 0, speed: 0, quality: 1200, full: true,
             SW: 0, SH: 0, tex: [null, null], fbo: [null, null], texO: [null, null], fboO: [null, null], pp: 0,
             scale: [1, 1, 1], lam: [1, 1, 1], prevAvg: [0, 0, 0], logMax: [1, 1, 1], logLo: [0, 0, 0],
             base: new Float32Array(48), rate: new Float32Array(48), spin: new Float32Array(48), ang: new Float32Array(48), tgt: new Float32Array(48),
@@ -1062,7 +1075,9 @@ function randomizeShape() {
 randomizeShape();
 for (let i = 0; i < 48; i++) V.ang[i] = V.tgt[i] = V.base[i];
 
+let qGuard = 0;                                   // last time the density buffers were (re)allocated
 function allocDensity() {
+  qGuard = performance.now();
   const aspect = cv.width / Math.max(1, cv.height);
   V.SH = V.quality; V.SW = Math.min(2400, Math.max(64, Math.round(V.SH * aspect)));
   for (let i = 0; i < 2; i++) {
@@ -1137,7 +1152,7 @@ function updateMusic(dt) {
   for (let i = 0; i < M.td.length; i += 4) { const s = (M.td[i] - 128) / 128; e += s * s; }
   M.rms += (Math.sqrt(e / (M.td.length / 4)) * 2.5 - M.rms) * Math.min(1, dt * 10);
 }
-function onDrop() { randomizeShape(); toast(pick(['drop', 'again', 'new shape', 'from the top']), 900); }
+function onDrop() { randomizeShape(); }
 
 // ---------- drives: music parameters -> map coefficients (48 angles: 6 maps x 8 slots) and colour weights
 const perm = [7, 13, 2, 18, 5, 11, 0, 16, 9, 3, 14, 19, 6, 1, 12, 8, 17, 4, 15, 10];
@@ -1365,7 +1380,18 @@ function display() {
   drawQuad();
 }
 
-let lastTs = 0, fpsS = 60, frameN = 0, lastUI = 0;
+let lastTs = 0, fpsS = 60, frameN = 0, lastUI = 0, lowSince = 0;
+const QSTEPS = [480, 720, 960, 1200], QNAME = { 480: 'Low', 720: 'Medium', 960: 'High', 1200: 'Ultra' };
+function watchFps(ts) {
+  if (document.hidden || fpsS >= 30) { lowSince = 0; return; }
+  if (!lowSince) { lowSince = ts; return; }
+  if (ts - lowSince < 2000 || ts - qGuard < 4000) return;       // sustained, and not just the hiccup of a reallocation
+  const i = QSTEPS.indexOf(V.quality);
+  lowSince = 0;
+  if (i <= 0) return;
+  V.quality = QSTEPS[i - 1]; $('#quality').value = V.quality; allocDensity();
+  fpsS = 60; toast('Quality lowered to ' + QNAME[V.quality]);
+}
 function frame(ts, manual) {
   if (!manual) requestAnimationFrame(frame);
   const now = ts / 1000, dt = Math.min(0.1, lastTs ? now - lastTs : 1 / 60); lastTs = now;
@@ -1375,6 +1401,7 @@ function frame(ts, manual) {
   display();
   if (hdr.active) hdrPresent();
   frameN++; fpsS = fpsS * 0.95 + 0.05 / Math.max(1e-3, dt);
+  watchFps(ts);
   if (ts - lastUI > 200) {
     lastUI = ts;
     $('#fps').textContent = fpsS.toFixed(0) + ' fps';
@@ -1404,25 +1431,37 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'SELECT') return;
   if (e.key === 'n' || e.key === 'N') { randomizeShape(); toast('New shape'); }
   else if (e.key === 'r' || e.key === 'R') { S.pendingRiff = true; toast('New riff on the next bar'); }
-  else if (e.key === 'h' || e.key === 'H') { panelHidden = !panelHidden; if (panelHidden) showPanel(false); else poke(); }
+  else if (e.key === 'h' || e.key === 'H') { panelHidden = !panelHidden; poke(); }
+  else if (e.key === 'd' || e.key === 'D') setDetails(!panel.classList.contains('open'));
   else if (e.key === 's' || e.key === 'S') { if (V.family < 2) { V.full = !V.full; $('#full').checked = V.full; resetDensity(); toast(V.full ? 'Full plane' : 'Disc only'); } }
   else if (e.key === 'f' || e.key === 'F') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
   else if (e.key === 'p') setPalette(V.palette + 1); else if (e.key === 'P') setPalette(V.palette - 1);
   else if (e.key >= '1' && e.key <= '5') setFamily(parseInt(e.key) - 1);
 });
 
-// the panel fades when the mouse is still, and comes back on movement; H toggles it outright
-const panel = $('#panel');
-let panelHidden = false, hideTimer = null, panelHover = false;
-function showPanel(on) { panel.classList.toggle('hide', !on); }
-function poke() {
-  if (panelHidden) return;
-  showPanel(true); clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { if (!panelHover && !panel.contains(document.activeElement)) showPanel(false); }, 2800);
+// By default the panel is just Play and Details. While playing, it and the mouse pointer hide when the mouse is still
+// (on touch: when nothing is tapped) and come back on movement or a tap. H hides the panel outright; D opens the details.
+const panel = $('#panel'), more = $('#more');
+let panelHidden = false, hideTimer = null, panelHover = false, idle = false;
+function setDetails(on) { panel.classList.toggle('open', on); more.setAttribute('aria-expanded', on ? 'true' : 'false'); poke(); }
+function applyUI() {
+  const fe = document.activeElement, editing = panel.contains(fe) && fe.tagName !== 'BUTTON';   // a slider or select being adjusted
+  const busy = panel.classList.contains('open') && (panelHover || editing);                       // keep the open details while they're in use
+  const show = !panelHidden && (!S.on || !idle || busy);
+  panel.classList.toggle('hide', !show);
+  document.documentElement.classList.toggle('idle', S.on && idle && !busy);
 }
+function poke() {
+  idle = false; applyUI(); clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => { idle = true; applyUI(); }, 3000);
+}
+more.addEventListener('click', () => { setDetails(!panel.classList.contains('open')); more.blur(); });
+go.addEventListener('click', () => go.blur());
 panel.addEventListener('mouseenter', () => panelHover = true);
 panel.addEventListener('mouseleave', () => { panelHover = false; poke(); });
-addEventListener('mousemove', poke); addEventListener('touchstart', poke, { passive: true });
+panel.addEventListener('focusout', () => { if (idle) applyUI(); });
+addEventListener('mousemove', poke); addEventListener('touchstart', poke, { passive: true }); addEventListener('pointerdown', poke);
+document.addEventListener('visibilitychange', () => { lowSince = 0; poke(); });
 poke();
 })();
 </script>
